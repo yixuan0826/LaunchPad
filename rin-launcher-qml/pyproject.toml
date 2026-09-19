@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rin-launcher-qml"
+version = "1.0.0"
+description = "类似希沃桌面助手的启动台应用 - 基于 Python + RinUI (QML)"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.6.0",
+    "PyYAML>=6.0.1",
+    "psutil>=5.9.0",
+    "pynput>=1.7.6",
+    "watchdog>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-qt>=4.2.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+]
+build = [
+    "pyinstaller>=6.1.0",
+]
+
+[project.entry-points.gui_scripts]
+rin-launcher-qml = "python.main:main"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+include = ["*"]
+
+[tool.pytest.ini_options]
+qt_api = "pyside6"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "PT", "T20", "SIM", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RSE", "RET", "ASYNC"]
+ignore = ["S101", "ARG001", "ARG002", "PTH123"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+strict_optional = true
+show_error_codes = true
+namespace_packages = true
