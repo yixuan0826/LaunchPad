@@ -12,29 +12,29 @@ FluentWindow {
     minimumHeight: 400
     visible: true
     title: qsTr("Rin Launcher")
+    titleEnabled: false
     
-    property var configManager: null
+    property var ConfigManager: null
     property var actionsModel: []
     property var categoriesModel: []
     property var filteredActions: []
     property string searchText: ""
     property bool isSearchMode: false
     
-    // Remove default title bar
-    titleBar.presetTitleBar: false
-    
     // Custom title bar with search
     titleBarArea: Rectangle {
         height: 56
         color: "transparent"
         
-        SearchField {
+        AutoSuggestBox {
             id: searchField
             width: parent.width - 64
             height: 40
             anchors.centerIn: parent
             placeholderText: qsTr("搜索应用、文件、命令... (Ctrl+Space)")
             text: launcherWindow.searchText
+            model: launcherWindow.filteredActions
+            textRole: "name"
             
             onTextChanged: {
                 launcherWindow.searchText = text
@@ -45,6 +45,10 @@ FluentWindow {
                 if (launcherWindow.filteredActions.length > 0) {
                     launcherWindow.executeAction(launcherWindow.filteredActions[0])
                 }
+            }
+            
+            onSuggestionChosen: {
+                launcherWindow.executeAction(launcherWindow.filteredActions.find(a => a.name === suggestion))
             }
         }
         
@@ -89,9 +93,9 @@ FluentWindow {
     // Settings Dialog
     SettingsDialog {
         id: settingsDialog
-        configManager: launcherWindow.configManager
+        ConfigManager: launcherWindow.ConfigManager
         onSettingsChanged: {
-            launcherWindow.configManager.saveConfig()
+            launcherWindow.ConfigManager.saveConfig()
             launcherWindow.refreshData()
         }
     }
@@ -122,9 +126,9 @@ FluentWindow {
     // Action Editor Dialog
     ActionEditorDialog {
         id: actionEditorDialog
-        configManager: launcherWindow.configManager
+        ConfigManager: launcherWindow.ConfigManager
         onActionSaved: {
-            launcherWindow.configManager.saveConfig()
+            launcherWindow.ConfigManager.saveConfig()
             launcherWindow.refreshData()
         }
     }
@@ -132,16 +136,16 @@ FluentWindow {
     // Category Editor Dialog
     CategoryEditorDialog {
         id: categoryEditorDialog
-        configManager: launcherWindow.configManager
+        ConfigManager: launcherWindow.ConfigManager
         onCategorySaved: {
-            launcherWindow.configManager.saveConfig()
+            launcherWindow.ConfigManager.saveConfig()
             launcherWindow.refreshData()
         }
     }
     
     // Toast/InfoBar for notifications
     Connections {
-        target: launcherWindow.configManager
+        target: launcherWindow.ConfigManager
         function onShowToast(message, severity) {
             floatLayer.createInfoBar({
                 severity: severity,
@@ -157,16 +161,16 @@ FluentWindow {
     function filterActions(text) {
         isSearchMode = (text.length > 0)
         if (isSearchMode) {
-            filteredActions = configManager.searchActions(text)
+            filteredActions = ConfigManager.searchActions(text)
         }
     }
     
     function getCategorizedActions() {
-        return configManager.getCategorizedActions()
+        return ConfigManager.getCategorizedActions()
     }
     
     function executeAction(action) {
-        configManager.executeAction(action)
+        ConfigManager.executeAction(action)
         if (isSearchMode) {
             searchField.text = ""
             searchText = ""
@@ -180,18 +184,18 @@ FluentWindow {
     }
     
     function duplicateAction(action) {
-        configManager.duplicateAction(action)
+        ConfigManager.duplicateAction(action)
         refreshData()
     }
     
     function deleteAction(action) {
-        var confirmDialog = Qt.createQmlObject('import QtQuick.Controls 2.15; MessageDialog { title: "确认删除"; text: "确定要删除操作 \\"" + action.name + qsTr("\\" 吗？"); standardButtons: MessageDialog.Yes | MessageDialog.No; onAccepted: configManager.deleteAction(action.id); }', launcherWindow)
+        var confirmDialog = Qt.createQmlObject('import QtQuick.Controls 2.15; MessageDialog { title: "确认删除"; text: "确定要删除操作 \\"" + action.name + qsTr("\\" 吗？"); standardButtons: MessageDialog.Yes | MessageDialog.No; onAccepted: ConfigManager.deleteAction(action.id); }', launcherWindow)
         confirmDialog.open()
     }
     
     function refreshData() {
-        actionsModel = configManager.getActions()
-        categoriesModel = configManager.getCategories()
+        actionsModel = ConfigManager.getActions()
+        categoriesModel = ConfigManager.getCategories()
     }
     
     Component.onCompleted: {

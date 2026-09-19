@@ -1,7 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 2.15
-import QtQuick.Dialogs 2.15
 import RinUI
 
 Dialog {
@@ -12,7 +11,7 @@ Dialog {
     width: 700
     height: 500
     
-    property var configManager: null
+    property var ConfigManager: null
     property var actionData: null
     property bool isNew: true
     signal actionSaved()
@@ -32,15 +31,6 @@ Dialog {
         anchors.bottom: parent.bottom
         width: parent.width
         initialItem: basicSettingsComponent
-        
-        delegate: Item {
-            width: stackView.width
-            height: stackView.height
-            Loader {
-                anchors.fill: parent
-                sourceComponent: stackView.currentItem
-            }
-        }
     }
     
     onAccepted: {
@@ -74,7 +64,10 @@ Dialog {
                     ToolButton {
                         id: iconButton
                         icon.name: actionData ? actionData.icon : "\ueb95"
-                        onClicked: iconPicker.open()
+                        onClicked: {
+                            iconPicker.targetButton = iconButton
+                            iconPicker.open()
+                        }
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
@@ -184,8 +177,8 @@ Dialog {
                 ComboBox {
                     id: categoryCombo
                     width: 300
-                    model: configManager.getCategoriesModel()
-                    currentIndex: configManager.getCategoryIndex(actionData ? actionData.category : "默认")
+                    model: ConfigManager.getCategoriesModel()
+                    currentIndex: ConfigManager.getCategoryIndex(actionData ? actionData.category : "默认")
                 }
             }
             
@@ -198,8 +191,11 @@ Dialog {
                     readOnly: true
                     placeholderText: qsTr("点击输入热键...")
                     text: actionData ? actionData.hotkey : ""
-                    onClicked: {
-                        // TODO: Implement hotkey recording
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            // TODO: Implement hotkey recording
+                        }
                     }
                 }
             }
@@ -310,14 +306,79 @@ Dialog {
         width: 560
         height: 480
         
-        TabView {
+        property var targetButton: null
+        
+        Column {
             anchors.fill: parent
-            margins: 16
+            spacing: 8
             
-            Tab {
-                title: "Font Awesome 5 Solid"
+            // Tab bar
+            Row {
+                id: iconPickerTabBar
+                spacing: 4
+                height: 36
+                
+                Rectangle {
+                    id: tab1
+                    width: 150
+                    height: 36
+                    radius: 4
+                    color: iconPickerTabBar.currentTab === 0 ? Theme.currentTheme.colors.primaryColor : "transparent"
+                    border.color: Theme.currentTheme.colors.controlBorderColor
+                    border.width: 1
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: iconPickerTabBar.currentTab = 0
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("Fluent Icons")
+                        color: iconPickerTabBar.currentTab === 0 ? Theme.currentTheme.colors.textOnAccentColor : Theme.currentTheme.colors.textColor
+                        font.pixelSize: 13
+                    }
+                }
+                
+                Rectangle {
+                    id: tab2
+                    width: 150
+                    height: 36
+                    radius: 4
+                    color: iconPickerTabBar.currentTab === 1 ? Theme.currentTheme.colors.primaryColor : "transparent"
+                    border.color: Theme.currentTheme.colors.controlBorderColor
+                    border.width: 1
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: iconPickerTabBar.currentTab = 1
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("More Icons")
+                        color: iconPickerTabBar.currentTab === 1 ? Theme.currentTheme.colors.textOnAccentColor : Theme.currentTheme.colors.textColor
+                        font.pixelSize: 13
+                    }
+                }
+            }
+            
+            property int currentTab: 0
+            
+            onCurrentTabChanged: {
+                if (currentTab === 0) {
+                    stackView.push(iconGridView1)
+                } else {
+                    stackView.push(iconGridView2)
+                }
+            }
+            
+            // Content stack
+            StackView {
+                anchors.fill: parent
+                initialItem: iconGridView1
+                clip: true
+            }
+            
+            Component {
+                id: iconGridView1
                 GridView {
-                    anchors.fill: parent
                     cellWidth: 48
                     cellHeight: 48
                     model: [
@@ -344,9 +405,45 @@ Dialog {
                         height: 48
                         icon.name: modelData
                         checkable: true
-                        checked: iconButton.icon.name === modelData
+                        checked: iconPicker.targetButton && iconPicker.targetButton.icon.name === modelData
                         onClicked: {
-                            iconButton.icon.name = modelData
+                            if (iconPicker.targetButton) {
+                                iconPicker.targetButton.icon.name = modelData
+                            }
+                            iconPicker.close()
+                        }
+                    }
+                }
+            }
+            
+            Component {
+                id: iconGridView2
+                GridView {
+                    cellWidth: 48
+                    cellHeight: 48
+                    model: [
+                        "ic_fluent_shopping_cart_20_regular", "ic_fluent_cart_20_regular", "ic_fluent_bag_20_regular",
+                        "ic_fluent_gift_20_regular", "ic_fluent_box_20_regular", "ic_fluent_package_20_regular",
+                        "ic_fluent_tag_20_regular", "ic_fluent_barcode_20_regular", "ic_fluent_qrcode_20_regular",
+                        "ic_fluent_receipt_20_regular", "ic_fluent_invoice_20_regular", "ic_fluent_credit_card_20_regular",
+                        "ic_fluent_bank_20_regular", "ic_fluent_calculator_20_regular", "ic_fluent_abacus_20_regular",
+                        "ic_fluent_chart_20_regular", "ic_fluent_graph_20_regular", "ic_fluent_pie_chart_20_regular",
+                        "ic_fluent_bar_chart_20_regular", "ic_fluent_line_chart_20_regular", "ic_fluent_area_chart_20_regular",
+                        "ic_fluent_scatter_chart_20_regular", "ic_fluent_bubble_chart_20_regular", "ic_fluent_radar_chart_20_regular",
+                        "ic_fluent_funnel_chart_20_regular", "ic_fluent_gantt_chart_20_regular", "ic_fluent_org_chart_20_regular",
+                        "ic_fluent_tree_map_20_regular", "ic_fluent_sunburst_20_regular", "ic_fluent_treemap_20_regular",
+                        "ic_fluent_waterfall_20_regular", "ic_fluent_stock_20_regular", "ic_fluent_candlestick_20_regular"
+                    ]
+                    delegate: ToolButton {
+                        width: 48
+                        height: 48
+                        icon.name: modelData
+                        checkable: true
+                        checked: iconPicker.targetButton && iconPicker.targetButton.icon.name === modelData
+                        onClicked: {
+                            if (iconPicker.targetButton) {
+                                iconPicker.targetButton.icon.name = modelData
+                            }
                             iconPicker.close()
                         }
                     }
@@ -393,9 +490,9 @@ Dialog {
         }
         
         if (isNew) {
-            configManager.addAction(action)
+            ConfigManager.addAction(action)
         } else {
-            configManager.updateAction(action)
+            ConfigManager.updateAction(action)
         }
         actionSaved()
     }
@@ -428,7 +525,7 @@ Dialog {
         urlTargetField.text = action.target
         argsField.text = action.arguments
         workdirField.text = action.working_dir
-        categoryCombo.currentIndex = configManager.getCategoryIndex(action.category)
+        categoryCombo.currentIndex = ConfigManager.getCategoryIndex(action.category)
         hotkeyField.text = action.hotkey
         tooltipField.text = action.tooltip
         orderSpin.value = action.order

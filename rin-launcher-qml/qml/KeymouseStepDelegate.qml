@@ -50,7 +50,10 @@ Frame {
                     readOnly: true
                     placeholderText: "点击录制热键..."
                     text: stepData.key || ""
-                    onClicked: startKeyRecording()
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: startKeyRecording()
+                    }
                 }
                 Text { text: qsTr("动作:") }
                 ComboBox {

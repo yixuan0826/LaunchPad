@@ -11,24 +11,25 @@ Frame {
     border.color: Theme.currentTheme.colors.borderColor
     border.width: 1
     clip: true
+    hoverable: false  // Disable built-in hover to avoid conflict
     
     property var actionData: null
     signal clicked(var actionData)
     signal contextMenu(var actionData, real mouseX, real mouseY)
     
-    property bool hovered: false
-    property bool pressed: false
+    property bool isHovered: false
+    property bool isPressed: false
     
     // Hover/press effects
     states: [
         State {
             name: "hovered"
-            when: hovered
+            when: isHovered
             PropertyChanges { target: actionCard; border.color: Theme.currentTheme.colors.primaryColor; elevation: 4 }
         },
         State {
             name: "pressed"
-            when: pressed
+            when: isPressed
             PropertyChanges { target: actionCard; background: Theme.currentTheme.colors.secondaryContainerColor; elevation: 1 }
         }
     ]
@@ -43,11 +44,11 @@ Frame {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
-        onEntered: actionCard.hovered = true
-        onExited: actionCard.hovered = false
-        onPressed: actionCard.pressed = true
+        onEntered: actionCard.isHovered = true
+        onExited: actionCard.isHovered = false
+        onPressed: actionCard.isPressed = true
         onReleased: {
-            actionCard.pressed = false
+            actionCard.isPressed = false
             if (containsMouse) {
                 actionCard.clicked(actionData)
             }

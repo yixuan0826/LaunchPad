@@ -1,7 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 2.15
-import QtQuick.Dialogs 2.15
 import RinUI
 
 Dialog {
@@ -12,33 +11,33 @@ Dialog {
     width: 800
     height: 600
     
-    property var configManager: null
+    property var ConfigManager: null
     signal settingsChanged()
     
     onAccepted: {
-        configManager.updateSettings(settingsModel)
+        ConfigManager.updateSettings(settingsModel)
         settingsChanged()
     }
     
     // Settings model
-    property var settingsModel: {
-        theme: "system",
-        language: "zh_CN",
-        showTray: true,
-        startMinimized: false,
-        autoStart: false,
-        globalHotkey: "Ctrl+Space",
-        searchEngine: "https://www.bing.com/search?q={query}",
-        gridColumns: 6,
-        itemSize: 96,
-        animationEnabled: true,
-        blurBackground: true,
-        accentColor: "#0078d4",
-        fontFamily: "Microsoft YaHei UI",
-        fontSize: 12,
-        adminAutoElevate: true,
-        confirmAdminActions: true,
-        logLevel: "INFO"
+    property var settingsModel: QtObject {
+        property string theme: "system"
+        property string language: "zh_CN"
+        property bool showTray: true
+        property bool startMinimized: false
+        property bool autoStart: false
+        property string globalHotkey: "Ctrl+Space"
+        property string searchEngine: "https://www.bing.com/search?q={query}"
+        property int gridColumns: 6
+        property int itemSize: 96
+        property bool animationEnabled: true
+        property bool blurBackground: true
+        property string accentColor: "#0078d4"
+        property string fontFamily: "Microsoft YaHei UI"
+        property int fontSize: 12
+        property bool adminAutoElevate: true
+        property bool confirmAdminActions: true
+        property string logLevel: "INFO"
     }
     
     FluentPage {
@@ -53,41 +52,41 @@ Dialog {
             width: 200
             spacing: 4
             
-            SettingItem {
+            SettingCard {
                 title: qsTr("常规")
                 icon.name: "ic_fluent_home_20_regular"
                 clickable: true
-                onClicked: stackView.push("GeneralSettings.qml")
+                onClicked: stackView.push(generalSettingsComponent)
             }
-            SettingItem {
+            SettingCard {
                 title: qsTr("外观")
                 icon.name: "ic_fluent_palette_20_regular"
                 clickable: true
-                onClicked: stackView.push("AppearanceSettings.qml")
+                onClicked: stackView.push(appearanceSettingsComponent)
             }
-            SettingItem {
+            SettingCard {
                 title: qsTr("动作管理")
                 icon.name: "ic_fluent_cog_20_regular"
                 clickable: true
-                onClicked: stackView.push("ActionsSettings.qml")
+                onClicked: stackView.push(actionsSettingsComponent)
             }
-            SettingItem {
+            SettingCard {
                 title: qsTr("热键")
                 icon.name: "ic_fluent_keyboard_20_regular"
                 clickable: true
-                onClicked: stackView.push("HotkeysSettings.qml")
+                onClicked: stackView.push(hotkeysSettingsComponent)
             }
-            SettingItem {
+            SettingCard {
                 title: qsTr("高级")
                 icon.name: "ic_fluent_toolbox_20_regular"
                 clickable: true
-                onClicked: stackView.push("AdvancedSettings.qml")
+                onClicked: stackView.push(advancedSettingsComponent)
             }
-            SettingItem {
+            SettingCard {
                 title: qsTr("关于")
                 icon.name: "ic_fluent_info_20_regular"
                 clickable: true
-                onClicked: stackView.push("AboutSettings.qml")
+                onClicked: stackView.push(aboutSettingsComponent)
             }
         }
         
@@ -99,26 +98,7 @@ Dialog {
             anchors.leftMargin: 24
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            initialItem: "GeneralSettings.qml"
-            
-            delegate: Item {
-                width: stackView.width
-                height: stackView.height
-                Loader {
-                    anchors.fill: parent
-                    source: stackView.currentItem
-                    sourceComponent: {
-                        switch (stackView.currentItem) {
-                            case "GeneralSettings.qml": return generalSettingsComponent
-                            case "AppearanceSettings.qml": return appearanceSettingsComponent
-                            case "ActionsSettings.qml": return actionsSettingsComponent
-                            case "HotkeysSettings.qml": return hotkeysSettingsComponent
-                            case "AdvancedSettings.qml": return advancedSettingsComponent
-                            case "AboutSettings.qml": return aboutSettingsComponent
-                        }
-                    }
-                }
-            }
+            initialItem: generalSettingsComponent
         }
     }
     
@@ -134,7 +114,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("启动行为")
                 icon.name: "ic_fluent_play_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 8
@@ -145,7 +125,7 @@ Dialog {
                             checked: settingsModel.autoStart
                             onCheckedChanged: {
                                 settingsModel.autoStart = checked
-                                configManager.setAutoStart(checked)
+                                ConfigManager.setAutoStart(checked)
                             }
                         }
                     }
@@ -171,7 +151,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("搜索设置")
                 icon.name: "ic_fluent_search_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 8
@@ -193,7 +173,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("启动台布局")
                 icon.name: "ic_fluent_grid_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -247,7 +227,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("主题")
                 icon.name: "ic_fluent_color_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -276,7 +256,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("强调色")
                 icon.name: "ic_fluent_paint_brush_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -304,7 +284,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("字体")
                 icon.name: "ic_fluent_text_font_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -346,7 +326,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("操作列表")
                 icon.name: "ic_fluent_list_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -355,7 +335,7 @@ Dialog {
                         spacing: 8
                         Button {
                             text: qsTr("新建操作")
-                            buttonType: "primary"
+                            highlighted: true
                             icon.name: "ic_fluent_add_20_regular"
                             onClicked: {
                                 actionEditorDialog.newAction()
@@ -380,7 +360,7 @@ Dialog {
                     ListView {
                         width: parent.width
                         height: 300
-                        model: configManager.getActions()
+                        model: ConfigManager.getActions()
                         delegate: SettingCard {
                             width: parent.width
                             title: modelData.name
@@ -393,15 +373,15 @@ Dialog {
                                 spacing: 8
                                 Button {
                                     text: qsTr("编辑")
-                                    compact: true
+                                    
                                     onClicked: actionEditorDialog.editAction(modelData)
                                 }
                                 Button {
                                     text: qsTr("删除")
-                                    buttonType: "subtle"
-                                    compact: true
+                                    flat: true
+                                    
                                     onClicked: {
-                                        var msg = Qt.createQmlObject('import QtQuick.Controls 2.15; MessageDialog { title: "确认删除"; text: "确定要删除操作 \\"" + modelData.name + qsTr("\\" 吗？"); standardButtons: MessageDialog.Yes | MessageDialog.No; onAccepted: configManager.deleteAction(modelData.id); }', actionEditorDialog)
+                                        var msg = Qt.createQmlObject('import QtQuick.Controls 2.15; MessageDialog { title: "确认删除"; text: "确定要删除操作 \\"" + modelData.name + qsTr("\\" 吗？"); standardButtons: MessageDialog.Yes | MessageDialog.No; onAccepted: ConfigManager.deleteAction(modelData.id); }', actionEditorDialog)
                                         msg.open()
                                     }
                                 }
@@ -415,7 +395,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("分类管理")
                 icon.name: "ic_fluent_folder_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -424,7 +404,7 @@ Dialog {
                         spacing: 8
                         Button {
                             text: qsTr("新建分类")
-                            buttonType: "primary"
+                            highlighted: true
                             icon.name: "ic_fluent_add_20_regular"
                             onClicked: categoryEditorDialog.newCategory()
                         }
@@ -433,7 +413,7 @@ Dialog {
                     ListView {
                         width: parent.width
                         height: 200
-                        model: configManager.getCategories()
+                        model: ConfigManager.getCategories()
                         delegate: SettingCard {
                             width: parent.width
                             title: modelData.name
@@ -446,15 +426,15 @@ Dialog {
                                 spacing: 8
                                 Button {
                                     text: qsTr("编辑")
-                                    compact: true
+                                    
                                     onClicked: categoryEditorDialog.editCategory(modelData)
                                 }
                                 Button {
                                     text: qsTr("删除")
-                                    buttonType: "subtle"
-                                    compact: true
+                                    flat: true
+                                    
                                     onClicked: {
-                                        var msg = Qt.createQmlObject('import QtQuick.Controls 2.15; MessageDialog { title: "确认删除"; text: "确定要删除分类 \\"" + modelData.name + qsTr("\\" 吗？"); standardButtons: MessageDialog.Yes | MessageDialog.No; onAccepted: configManager.deleteCategory(modelData.id); }', categoryEditorDialog)
+                                        var msg = Qt.createQmlObject('import QtQuick.Controls 2.15; MessageDialog { title: "确认删除"; text: "确定要删除分类 \\"" + modelData.name + qsTr("\\" 吗？"); standardButtons: MessageDialog.Yes | MessageDialog.No; onAccepted: ConfigManager.deleteCategory(modelData.id); }', categoryEditorDialog)
                                         msg.open()
                                     }
                                 }
@@ -477,7 +457,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("全局热键")
                 icon.name: "ic_fluent_magic_wand_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -490,7 +470,10 @@ Dialog {
                             readOnly: true
                             text: settingsModel.globalHotkey
                             placeholderText: "点击输入热键..."
-                            onClicked: startHotkeyRecording()
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: startHotkeyRecording()
+                            }
                         }
                     }
                     
@@ -517,7 +500,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("管理员权限")
                 icon.name: "ic_fluent_shield_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -540,9 +523,9 @@ Dialog {
                     SettingItem {
                         Button {
                             text: qsTr("以管理员身份重启")
-                            buttonType: "subtle"
+                            flat: true
                             icon.name: "ic_fluent_restart_20_regular"
-                            onClicked: configManager.restartAsAdmin()
+                            onClicked: ConfigManager.restartAsAdmin()
                         }
                     }
                 }
@@ -552,7 +535,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("配置管理")
                 icon.name: "ic_fluent_database_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -562,12 +545,12 @@ Dialog {
                         Button {
                             text: qsTr("打开配置文件夹")
                             icon.name: "ic_fluent_folder_open_20_regular"
-                            onClicked: configManager.openConfigFolder()
+                            onClicked: ConfigManager.openConfigFolder()
                         }
                         Button {
                             text: qsTr("打开配置文件")
                             icon.name: "ic_fluent_file_20_regular"
-                            onClicked: configManager.openConfigFile()
+                            onClicked: ConfigManager.openConfigFile()
                         }
                     }
                     
@@ -576,12 +559,12 @@ Dialog {
                         Button {
                             text: qsTr("导入配置")
                             icon.name: "ic_fluent_import_20_regular"
-                            onClicked: configManager.importConfig()
+                            onClicked: ConfigManager.importConfig()
                         }
                         Button {
                             text: qsTr("导出配置")
                             icon.name: "ic_fluent_export_20_regular"
-                            onClicked: configManager.exportConfig()
+                            onClicked: ConfigManager.exportConfig()
                         }
                     }
                     
@@ -589,10 +572,10 @@ Dialog {
                         spacing: 8
                         Button {
                             text: qsTr("重置所有设置")
-                            buttonType: "subtle"
+                            flat: true
                             icon.name: "ic_fluent_arrow_reset_20_regular"
                             onClicked: {
-                                var msg = Qt.createQmlObject('import QtQuick.Controls 2.15; MessageDialog { title: "确认重置"; text: "这将重置所有设置为默认值，且不可恢复。确定继续吗？"; standardButtons: MessageDialog.Yes | MessageDialog.No; onAccepted: configManager.resetToDefaults(); }', settingsDialog)
+                                var msg = Qt.createQmlObject('import QtQuick.Controls 2.15; MessageDialog { title: "确认重置"; text: "这将重置所有设置为默认值，且不可恢复。确定继续吗？"; standardButtons: MessageDialog.Yes | MessageDialog.No; onAccepted: ConfigManager.resetToDefaults(); }', settingsDialog)
                                 msg.open()
                             }
                         }
@@ -604,7 +587,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("日志")
                 icon.name: "ic_fluent_document_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 12
@@ -649,7 +632,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("链接")
                 icon.name: "ic_fluent_link_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 8
@@ -673,7 +656,7 @@ Dialog {
                 width: parent.width
                 title: qsTr("许可证")
                 icon.name: "ic_fluent_shield_20_regular"
-                initiallyExpanded: true
+                expanded: true
                 content: Column {
                     width: parent.width
                     spacing: 8

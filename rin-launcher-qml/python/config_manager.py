@@ -47,9 +47,9 @@ class ConfigManager:
         self.backup_dir = self.config_dir / "backups"
         self.backup_dir.mkdir(exist_ok=True)
 
-        self._config = self.load()
         self._observer: Optional[Observer] = None
         self._change_callbacks: List[Callable[[], None]] = []
+        self._config = self.load()
 
     @property
     def config(self) -> dict:

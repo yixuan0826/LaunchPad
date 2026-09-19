@@ -1,7 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 2.15
-import QtQuick.Dialogs 2.15
 import RinUI
 
 Dialog {
@@ -12,7 +11,7 @@ Dialog {
     width: 480
     height: 360
     
-    property var configManager: null
+    property var ConfigManager: null
     property var categoryData: null
     property bool isNew: true
     signal categorySaved()
@@ -41,7 +40,10 @@ Dialog {
                 ToolButton {
                     id: iconButton
                     icon.name: categoryData ? categoryData.icon : "\ueb8f"
-                    onClicked: iconPicker.open()
+                    onClicked: {
+                        iconPicker.targetButton = iconButton
+                        iconPicker.open()
+                    }
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
@@ -82,9 +84,11 @@ Dialog {
         width: 480
         height: 400
         
+        property var targetButton: null
+        
         GridView {
             anchors.fill: parent
-            margins: 16
+            anchors.margins: 16
             cellWidth: 48
             cellHeight: 48
             model: [
@@ -104,9 +108,11 @@ Dialog {
                 height: 48
                 icon.name: modelData
                 checkable: true
-                checked: iconButton.icon.name === modelData
+                checked: iconPicker.targetButton && iconPicker.targetButton.icon.name === modelData
                 onClicked: {
-                    iconButton.icon.name = modelData
+                    if (iconPicker.targetButton) {
+                        iconPicker.targetButton.icon.name = modelData
+                    }
                     iconPicker.close()
                 }
             }
@@ -132,9 +138,9 @@ Dialog {
         }
         
         if (isNew) {
-            configManager.addCategory(category)
+            ConfigManager.addCategory(category)
         } else {
-            configManager.updateCategory(category)
+            ConfigManager.updateCategory(category)
         }
         categorySaved()
     }
