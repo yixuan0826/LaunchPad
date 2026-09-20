@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.ruff_cache/
+
+# PyInstaller
+*.manifest
+
+# RinUI writes this next to the working directory at runtime
+/RinUI/
+
+# Runtime
+launcher.log

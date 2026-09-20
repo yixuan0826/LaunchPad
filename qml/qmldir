@@ -1,0 +1,11 @@
+module RinLauncher
+
+LauncherWindow 1.0 LauncherWindow.qml
+CategorySection 1.0 CategorySection.qml
+ActionCard 1.0 ActionCard.qml
+SettingsDialog 1.0 SettingsDialog.qml
+ActionEditorDialog 1.0 ActionEditorDialog.qml
+CategoryEditorDialog 1.0 CategoryEditorDialog.qml
+KeymouseStepDelegate 1.0 KeymouseStepDelegate.qml
+IconPicker 1.0 IconPicker.qml
+ConfirmDialog 1.0 ConfirmDialog.qml
