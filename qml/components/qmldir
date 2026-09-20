@@ -1,0 +1,7 @@
+AppIcon 1.0 AppIcon.qml
+CategorySection 1.0 CategorySection.qml
+EntryTile 1.0 EntryTile.qml
+FormRow 1.0 FormRow.qml
+HotkeyField 1.0 HotkeyField.qml
+KeymouseStepDelegate 1.0 KeymouseStepDelegate.qml
+ZoneHeader 1.0 ZoneHeader.qml

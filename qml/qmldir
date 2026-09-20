@@ -1,11 +1,4 @@
 module RinLauncher
 
+# 页面与对话框都按 URL 直接加载（NavigationView / 对话框实例），这里只登记主窗口。
 LauncherWindow 1.0 LauncherWindow.qml
-CategorySection 1.0 CategorySection.qml
-ActionCard 1.0 ActionCard.qml
-SettingsDialog 1.0 SettingsDialog.qml
-ActionEditorDialog 1.0 ActionEditorDialog.qml
-CategoryEditorDialog 1.0 CategoryEditorDialog.qml
-KeymouseStepDelegate 1.0 KeymouseStepDelegate.qml
-IconPicker 1.0 IconPicker.qml
-ConfirmDialog 1.0 ConfirmDialog.qml

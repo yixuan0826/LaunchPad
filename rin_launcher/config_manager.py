@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_DIR = Path.home() / "AppData" / "Roaming" / "RinLauncher"
 FALLBACK_CATEGORY = "默认"
+ICON_DIR = Path(__file__).resolve().parent.parent / "assets" / "icons" / "lawnicons"
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "theme": "system",
@@ -35,9 +36,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "showTray": True,
     "startMinimized": False,
     "autoStart": False,
+    "alwaysOnTop": True,
     "globalHotkey": "Ctrl+Space",
     "searchEngine": "https://www.bing.com/search?q={query}",
-    "gridColumns": 6,
+    "gridColumns": 8,
     "itemSize": 96,
     "animationEnabled": True,
     "blurBackground": True,
@@ -49,23 +51,38 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "logLevel": "INFO",
 }
 
-# (name, type, target, category, icon) — ``order`` is derived per category.
+# (name, type, target, category, icon).  ``order`` is derived per category.
+# Icons are either a RinUI Fluent name or "lawnicons:<bundled svg stem>".
 DEFAULT_ACTIONS: tuple = (
-    ("记事本", "file", "notepad.exe", "常用", "ic_fluent_pen_20_regular"),
-    ("计算器", "file", "calc.exe", "常用", "ic_fluent_calculator_20_regular"),
-    ("文件资源管理器", "file", "explorer.exe", "系统工具", "ic_fluent_folder_20_regular"),
-    ("命令提示符", "cmd", "cmd.exe", "开发工具", "ic_fluent_terminal_20_regular"),
-    ("打开配置目录", "file", "{configdir}", "开发工具", "ic_fluent_settings_20_regular"),
-    ("RinUI 官网", "url", "https://ui.rinlit.cn", "媒体娱乐", "ic_fluent_globe_20_regular"),
+    ("记事本", "file", "notepad.exe", "常用",
+     "lawnicons:generic_notes"),
+    ("计算器", "file", "calc.exe", "常用",
+     "lawnicons:generic_calculator_plus_minus_multi_equal"),
+    ("画图", "file", "mspaint.exe", "常用",
+     "lawnicons:generic_background_eraser"),
+    ("文件资源管理器", "file", "explorer.exe", "系统工具",
+     "lawnicons:generic_files"),
+    ("任务管理器", "file", "taskmgr.exe", "系统工具",
+     "lawnicons:generic_grid_3x3"),
+    ("控制面板", "file", "control.exe", "系统工具",
+     "lawnicons:generic_settings"),
+    ("命令提示符", "cmd", "cmd.exe", "开发工具",
+     "lawnicons:generic_shell"),
+    ("PowerShell", "cmd", "powershell.exe", "开发工具",
+     "lawnicons:generic_braces"),
+    ("打开配置目录", "file", "{configdir}", "开发工具",
+     "ic_fluent_folder_open_20_regular"),
+    ("RinUI 官网", "url", "https://ui.rinlit.cn", "媒体娱乐",
+     "lawnicons:generic_browser"),
 )
 
 # (name, icon, order)
 DEFAULT_CATEGORIES: tuple = (
-    ("常用", "ic_fluent_star_20_regular", 0),
-    ("系统工具", "ic_fluent_toolbox_20_regular", 1),
-    ("开发工具", "ic_fluent_code_20_regular", 2),
-    ("媒体娱乐", "ic_fluent_video_20_regular", 3),
-    (FALLBACK_CATEGORY, "ic_fluent_folder_20_regular", 99),
+    ("常用", "lawnicons:generic_heart", 0),
+    ("系统工具", "lawnicons:generic_settings", 1),
+    ("开发工具", "lawnicons:generic_braces", 2),
+    ("媒体娱乐", "lawnicons:generic_player", 3),
+    (FALLBACK_CATEGORY, "lawnicons:generic_files", 99),
 )
 
 
@@ -118,6 +135,10 @@ class ConfigManager(QObject):
 
     showToast = Signal(str, str)
     configChanged = Signal()
+    # The window / tray / hotkey owner listens to these and applies the change.
+    hotkeyChanged = Signal(str)
+    alwaysOnTopChanged = Signal(bool)
+    trayEnabledChanged = Signal(bool)
 
     def __init__(self, config_dir: Path | None = None, parent: QObject | None = None):
         super().__init__(parent)
@@ -255,14 +276,32 @@ class ConfigManager(QObject):
             buckets.setdefault(action.get("category", FALLBACK_CATEGORY), []).append(action)
 
         sections = []
+        known = set()
         for category in sorted(self._config["categories"], key=lambda c: c.get("order", 0)):
             name = category["name"]
+            known.add(name)
             if name in buckets or (keep_empty_fallback and name == FALLBACK_CATEGORY):
                 sections.append({
                     "categoryName": name,
                     "categoryIcon": category.get("icon", "ic_fluent_folder_20_regular"),
                     "actions": sorted(buckets.get(name, []), key=lambda a: a.get("order", 0)),
                 })
+
+        # An entry whose category was deleted or renamed by hand must still be
+        # reachable, otherwise it silently vanishes from the launcher.
+        orphans = [action for name, items in buckets.items() if name not in known for action in items]
+        if orphans:
+            orphans.sort(key=lambda action: action.get("order", 0))
+            fallback = next((s for s in sections if s["categoryName"] == FALLBACK_CATEGORY), None)
+            if fallback is None:
+                sections.append({
+                    "categoryName": FALLBACK_CATEGORY,
+                    "categoryIcon": "ic_fluent_folder_20_regular",
+                    "actions": orphans,
+                })
+            else:
+                fallback["actions"] = sorted(fallback["actions"] + orphans,
+                                             key=lambda action: action.get("order", 0))
         return sections
 
     # ------------------------------------------------------------------
@@ -314,28 +353,116 @@ class ConfigManager(QObject):
     def updateCategory(self, category: dict) -> bool:
         category = dict(category)
         for index, existing in enumerate(self._config["categories"]):
-            if existing["id"] == category.get("id"):
-                self._config["categories"][index] = category
-                return self.save()
+            if existing["id"] != category.get("id"):
+                continue
+            # Entries reference a category by name, so a rename has to cascade.
+            old_name, new_name = existing["name"], category.get("name", existing["name"])
+            if old_name != new_name:
+                for action in self._config["actions"]:
+                    if action.get("category") == old_name:
+                        action["category"] = new_name
+            self._config["categories"][index] = category
+            return self.save()
         logger.warning("No category with id %s to update", category.get("id"))
         return False
 
     @Slot(str, result=bool)
     def deleteCategory(self, category_id: str) -> bool:
+        victim = next((c for c in self._config["categories"] if c["id"] == category_id), None)
+        if victim is None:
+            return False
+
         self._config["categories"] = [c for c in self._config["categories"] if c["id"] != category_id]
+        # Entries store the category *name*; falling back to the id here would
+        # strand them outside every category and hide them from the launcher.
         for action in self._config["actions"]:
-            if action.get("category") == category_id:
+            if action.get("category") == victim["name"]:
                 action["category"] = FALLBACK_CATEGORY
         return self.save()
 
     @Slot("QVariantMap", result=bool)
     def updateSettings(self, settings: dict) -> bool:
         settings = dict(settings)
+        previous = self._config["settings"]
+
         # The run-at-login registry entry only needs touching when it changes.
-        if "autoStart" in settings and settings["autoStart"] != self._config["settings"].get("autoStart"):
+        if "autoStart" in settings and settings["autoStart"] != previous.get("autoStart"):
             set_run_on_startup(bool(settings["autoStart"]))
-        self._config["settings"].update(settings)
-        return self.save()
+
+        previous.update(settings)
+        saved = self.save()
+
+        if saved:
+            if "globalHotkey" in settings:
+                self.hotkeyChanged.emit(str(previous["globalHotkey"]))
+            if "alwaysOnTop" in settings:
+                self.alwaysOnTopChanged.emit(bool(previous["alwaysOnTop"]))
+            if "showTray" in settings:
+                self.trayEnabledChanged.emit(bool(previous["showTray"]))
+        return saved
+
+    @Slot(str, bool, result=bool)
+    def toggleAction(self, action_id: str, enabled: bool) -> bool:
+        for action in self._config["actions"]:
+            if action["id"] == action_id:
+                if action.get("enabled", True) == enabled:
+                    return True  # 没有变化，不必重写配置（也避免 UI 反复触发写盘）
+                action["enabled"] = enabled
+                return self.save()
+        return False
+
+    @Slot(str, int, result=bool)
+    def moveAction(self, action_id: str, delta: int) -> bool:
+        """Move an entry up/down inside its own category."""
+        actions = self._config["actions"]
+        for index, action in enumerate(actions):
+            if action["id"] != action_id:
+                continue
+            peers = sorted(
+                (other for other in actions
+                 if other.get("category") == action.get("category")),
+                key=lambda item: item.get("order", 0),
+            )
+            position = peers.index(action)
+            target = position + delta
+            if not 0 <= target < len(peers):
+                return False
+            peers.insert(target, peers.pop(position))
+            for order, peer in enumerate(peers):
+                peer["order"] = order
+            return self.save()
+        return False
+
+    @Slot(str, int, result=bool)
+    def moveCategory(self, category_id: str, delta: int) -> bool:
+        """Move a category up/down in the sidebar order."""
+        categories = self._config["categories"]
+        for index, category in enumerate(categories):
+            if category["id"] != category_id:
+                continue
+            target = index + delta
+            if not 0 <= target < len(categories):
+                return False
+            categories.insert(target, categories.pop(index))
+            for order, item in enumerate(categories):
+                item["order"] = order
+            return self.save()
+        return False
+
+    @Slot(result=bool)
+    def reloadConfig(self) -> bool:
+        """Re-read config.yaml from disk and tell the UI about it."""
+        self._config = self._load()
+        self._categorized = None
+        self.configChanged.emit()
+        return True
+
+    @Slot(result="QStringList")
+    def getBundledIcons(self) -> list[str]:
+        """Names of the icon marks shipped under assets/icons/lawnicons."""
+        if not ICON_DIR.is_dir():
+            return []
+        return sorted(path.stem for path in ICON_DIR.glob("*.svg"))
 
     @Slot(str, str)
     def notify(self, message: str, severity: str = "info") -> None:
@@ -361,6 +488,12 @@ class ConfigManager(QObject):
         path, _ = QFileDialog.getSaveFileName(
             None, "导出配置", str(self.config_file), "YAML (*.yaml *.yml)")
         return bool(path) and self._write_to(Path(path))
+
+    @Slot(result=str)
+    def pickFile(self) -> str:
+        """Native file picker used by the entry editor's "browse" button."""
+        path, _ = QFileDialog.getOpenFileName(None, "选择文件或程序", str(Path.home()))
+        return path or ""
 
     @Slot("QVariantMap")
     def executeAction(self, action: dict) -> None:

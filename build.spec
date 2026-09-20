@@ -12,7 +12,10 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(ROOT / "qml"), "qml"),
-        (str(ROOT / "Rin-UI" / "RinUI"), "RinUI"),
+        # RinUI 是内联的普通目录，QML/字体/主题都不是 Python 模块，必须显式带上。
+        (str(ROOT / "RinUI"), "RinUI"),
+        # QML 里用相对路径引用 Lawnicons，图标与 icon.ico 都在 assets 下。
+        (str(ROOT / "assets"), "assets"),
     ],
     # PyInstaller's PySide6 hook already pulls in the Qt modules, so only the
     # plain-Python dependencies have to be listed here.
