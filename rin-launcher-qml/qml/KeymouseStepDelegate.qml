@@ -8,7 +8,7 @@ Frame {
     width: parent.width
     height: 60
     radius: 8
-    border.color: Theme.currentTheme.colors.borderColor
+    border.color: Theme.currentTheme.colors.cardBorderColor
     border.width: 1
     
     property var stepData: null

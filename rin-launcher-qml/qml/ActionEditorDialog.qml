@@ -1,17 +1,17 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 2.15
+import QtQuick.Controls 2.15 as QQC2
 import RinUI
 
-Dialog {
+QQC2.Dialog {
     id: actionEditorDialog
     title: isNew ? qsTr("新建操作") : qsTr("编辑操作")
     modal: true
-    standardButtons: Dialog.Ok | Dialog.Cancel
+    standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
     width: 700
     height: 500
     
-    property var ConfigManager: null
     property var actionData: null
     property bool isNew: true
     signal actionSaved()
@@ -92,8 +92,8 @@ Dialog {
                     ]
                     currentIndex: actionData ? ["file", "cmd", "url", "keymouse"].indexOf(actionData.type) : 0
                     onCurrentIndexChanged: {
-                        targetStack.currentIndex = currentIndex
-                        stackView.tabBar.getTabButton(2).enabled = (currentIndex === 3)
+                        // 目标编辑区的显隐由 targetStack 的 states 声明式处理
+                        tabBar.itemAt(2).enabled = (currentIndex === 3)
                     }
                 }
             }
@@ -298,11 +298,11 @@ Dialog {
     }
     
     // Icon Picker Dialog
-    Dialog {
+    QQC2.Dialog {
         id: iconPicker
         title: qsTr("选择图标")
         modal: true
-        standardButtons: Dialog.Cancel
+        standardButtons: QQC2.Dialog.Cancel
         width: 560
         height: 480
         
@@ -371,7 +371,8 @@ Dialog {
             
             // Content stack
             StackView {
-                anchors.fill: parent
+                width: parent.width
+                height: parent.height - iconPickerTabBar.height - parent.spacing
                 initialItem: iconGridView1
                 clip: true
             }

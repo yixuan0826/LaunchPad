@@ -1,22 +1,23 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 2.15
+import QtQuick.Controls 2.15 as QQC2
 import RinUI
 
-Dialog {
+QQC2.Dialog {
     id: categoryEditorDialog
     title: isNew ? qsTr("新建分类") : qsTr("编辑分类")
     modal: true
-    standardButtons: Dialog.Ok | Dialog.Cancel
+    standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
     width: 480
     height: 360
     
-    property var ConfigManager: null
     property var categoryData: null
     property bool isNew: true
     signal categorySaved()
     
     FluentPage {
+        anchors.fill: parent
         title: ""
         spacing: 16
         padding: 24
@@ -76,11 +77,11 @@ Dialog {
     }
     
     // Icon Picker Dialog
-    Dialog {
+    QQC2.Dialog {
         id: iconPicker
         title: qsTr("选择图标")
         modal: true
-        standardButtons: Dialog.Cancel
+        standardButtons: QQC2.Dialog.Cancel
         width: 480
         height: 400
         

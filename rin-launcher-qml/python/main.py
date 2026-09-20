@@ -14,9 +14,19 @@ PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Add RinUI to path if it exists locally
-RINUI_PATH = PROJECT_ROOT / "Rin-UI"
-if RINUI_PATH.exists() and str(RINUI_PATH) not in sys.path:
+# Locate the RinUI library (cloned alongside this project or in the workspace root)
+def _find_rinui_path() -> Path | None:
+    for candidate in (
+        PROJECT_ROOT / "Rin-UI",
+        PROJECT_ROOT.parent / "Rin-UI",
+        PROJECT_ROOT / "RinUI",
+    ):
+        if (candidate / "RinUI" / "__init__.py").is_file():
+            return candidate
+    return None
+
+RINUI_PATH = _find_rinui_path()
+if RINUI_PATH and str(RINUI_PATH) not in sys.path:
     sys.path.insert(0, str(RINUI_PATH))
 
 # Import RinUI first to set up HiDPI
@@ -73,12 +83,16 @@ def main():
         logger.error(f"QML file not found: {qml_file}")
         return 1
 
-    # Use RinUIWindow which handles QML engine setup properly
-    window = RinUIWindow(qml_file)
-    
-    # Expose config manager and action executor to QML
+    # Create the window/engine first, inject the backend objects into the QML
+    # context, and only then load the QML file so that the first binding
+    # evaluation already sees ConfigManager / ActionExecutor.
+    window = RinUIWindow()
+
+    config_manager.action_executor = action_executor
     window.engine.rootContext().setContextProperty("ConfigManager", config_manager)
     window.engine.rootContext().setContextProperty("ActionExecutor", action_executor)
+
+    window.load(qml_file)
 
     if not window.root_window:
         logger.error("Failed to load QML")

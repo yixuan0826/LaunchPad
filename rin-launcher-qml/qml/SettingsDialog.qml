@@ -1,17 +1,17 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 2.15
+import QtQuick.Controls 2.15 as QQC2
 import RinUI
 
-Dialog {
+QQC2.Dialog {
     id: settingsDialog
     title: qsTr("设置")
     modal: true
-    standardButtons: Dialog.Ok | Dialog.Cancel
+    standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
     width: 800
     height: 600
     
-    property var ConfigManager: null
     signal settingsChanged()
     
     onAccepted: {
@@ -42,63 +42,80 @@ Dialog {
     
     FluentPage {
         id: settingsPage
+        anchors.fill: parent
         title: qsTr("设置")
         spacing: 20
         padding: 24
         
-        // Sidebar navigation
-        Column {
-            id: sidebar
-            width: 200
-            spacing: 4
-            
-            SettingCard {
-                title: qsTr("常规")
-                icon.name: "ic_fluent_home_20_regular"
-                clickable: true
-                onClicked: stackView.push(generalSettingsComponent)
+        // FluentPage 的内容区是 ColumnLayout，锚点布局需要包在一个 Item 中
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 460
+            implicitHeight: 460
+
+            // Sidebar navigation
+            Column {
+                id: sidebar
+                width: 200
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                spacing: 4
+
+                SettingCard {
+                    width: parent.width
+                    title: qsTr("常规")
+                    icon.name: "ic_fluent_home_20_regular"
+                    clickable: true
+                    onClicked: stackView.push(generalSettingsComponent)
+                }
+                SettingCard {
+                    width: parent.width
+                    title: qsTr("外观")
+                    icon.name: "ic_fluent_palette_20_regular"
+                    clickable: true
+                    onClicked: stackView.push(appearanceSettingsComponent)
+                }
+                SettingCard {
+                    width: parent.width
+                    title: qsTr("动作管理")
+                    icon.name: "ic_fluent_cog_20_regular"
+                    clickable: true
+                    onClicked: stackView.push(actionsSettingsComponent)
+                }
+                SettingCard {
+                    width: parent.width
+                    title: qsTr("热键")
+                    icon.name: "ic_fluent_keyboard_20_regular"
+                    clickable: true
+                    onClicked: stackView.push(hotkeysSettingsComponent)
+                }
+                SettingCard {
+                    width: parent.width
+                    title: qsTr("高级")
+                    icon.name: "ic_fluent_toolbox_20_regular"
+                    clickable: true
+                    onClicked: stackView.push(advancedSettingsComponent)
+                }
+                SettingCard {
+                    width: parent.width
+                    title: qsTr("关于")
+                    icon.name: "ic_fluent_info_20_regular"
+                    clickable: true
+                    onClicked: stackView.push(aboutSettingsComponent)
+                }
             }
-            SettingCard {
-                title: qsTr("外观")
-                icon.name: "ic_fluent_palette_20_regular"
-                clickable: true
-                onClicked: stackView.push(appearanceSettingsComponent)
+
+            // Content stack
+            StackView {
+                id: stackView
+                anchors.left: sidebar.right
+                anchors.leftMargin: 24
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                initialItem: generalSettingsComponent
             }
-            SettingCard {
-                title: qsTr("动作管理")
-                icon.name: "ic_fluent_cog_20_regular"
-                clickable: true
-                onClicked: stackView.push(actionsSettingsComponent)
-            }
-            SettingCard {
-                title: qsTr("热键")
-                icon.name: "ic_fluent_keyboard_20_regular"
-                clickable: true
-                onClicked: stackView.push(hotkeysSettingsComponent)
-            }
-            SettingCard {
-                title: qsTr("高级")
-                icon.name: "ic_fluent_toolbox_20_regular"
-                clickable: true
-                onClicked: stackView.push(advancedSettingsComponent)
-            }
-            SettingCard {
-                title: qsTr("关于")
-                icon.name: "ic_fluent_info_20_regular"
-                clickable: true
-                onClicked: stackView.push(aboutSettingsComponent)
-            }
-        }
-        
-        // Content stack
-        StackView {
-            id: stackView
-            width: parent.width - sidebar.width - 24
-            anchors.left: sidebar.right
-            anchors.leftMargin: 24
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            initialItem: generalSettingsComponent
         }
     }
     

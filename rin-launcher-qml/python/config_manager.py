@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, List, Optional
 
 import yaml
+from PySide6.QtCore import QObject, Signal, Slot
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -36,8 +37,11 @@ class ConfigChangeHandler(FileSystemEventHandler):
                 self.callback()
 
 
-class ConfigManager:
-    def __init__(self, config_dir: Optional[Path] = None):
+class ConfigManager(QObject):
+    showToast = Signal(str, str)
+
+    def __init__(self, config_dir: Optional[Path] = None, parent: Optional[QObject] = None):
+        super().__init__(parent)
         if config_dir is None:
             config_dir = Path.home() / "AppData" / "Roaming" / "RinLauncher"
         self.config_dir = Path(config_dir)
@@ -49,6 +53,7 @@ class ConfigManager:
 
         self._observer: Optional[Observer] = None
         self._change_callbacks: List[Callable[[], None]] = []
+        self.action_executor = None
         self._config = self.load()
 
     @property
@@ -70,7 +75,20 @@ class ConfigManager:
     def _create_default(self) -> dict:
         config = {
             "version": 1,
-            "actions": [],
+            "actions": [
+                {"id": uuid.uuid4().hex[:8], "name": "记事本", "type": "file", "target": "notepad.exe",
+                 "category": "常用", "icon": "ic_fluent_pen_20_regular", "enabled": True, "order": 0},
+                {"id": uuid.uuid4().hex[:8], "name": "计算器", "type": "file", "target": "calc.exe",
+                 "category": "常用", "icon": "ic_fluent_calculator_20_regular", "enabled": True, "order": 1},
+                {"id": uuid.uuid4().hex[:8], "name": "文件资源管理器", "type": "file", "target": "explorer.exe",
+                 "category": "系统工具", "icon": "ic_fluent_folder_20_regular", "enabled": True, "order": 0},
+                {"id": uuid.uuid4().hex[:8], "name": "命令提示符", "type": "cmd", "target": "cmd.exe",
+                 "category": "开发工具", "icon": "ic_fluent_terminal_20_regular", "enabled": True, "order": 0},
+                {"id": uuid.uuid4().hex[:8], "name": "打开配置目录", "type": "file", "target": "{configdir}",
+                 "category": "开发工具", "icon": "ic_fluent_settings_20_regular", "enabled": True, "order": 1},
+                {"id": uuid.uuid4().hex[:8], "name": "RinUI 官网", "type": "url", "target": "https://ui.rinlit.cn",
+                 "category": "媒体娱乐", "icon": "ic_fluent_globe_20_regular", "enabled": True, "order": 0},
+            ],
             "categories": [
                 {"id": uuid.uuid4().hex[:8], "name": "常用", "icon": "ic_fluent_star_20_regular", "order": 0, "expanded": True},
                 {"id": uuid.uuid4().hex[:8], "name": "系统工具", "icon": "ic_fluent_toolbox_20_regular", "order": 1, "expanded": True},
@@ -328,12 +346,14 @@ class ConfigManager:
             logger.error(f"Failed to set auto start: {e}")
 
     def open_config_folder(self):
-        import subprocess
-        subprocess.Popen(f'explorer "{self.config_dir}"')
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config_dir)))
 
     def open_config_file(self):
-        import subprocess
-        subprocess.Popen(f'notepad "{self.config_file}"')
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config_file)))
 
     def import_config_dialog(self):
         # This will be called from QML via FileDialog
@@ -382,3 +402,119 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Failed to restart as admin: {e}")
             return False
+
+    # ------------------------------------------------------------------
+    # QML-facing API (camelCase slots exposed to the QML layer)
+    # ------------------------------------------------------------------
+    @Slot(result="QVariantList")
+    def getActions(self) -> List[dict]:
+        return self.get_actions()
+
+    @Slot(result="QVariantList")
+    def getCategories(self) -> List[dict]:
+        return self.get_categories()
+
+    @Slot(result="QStringList")
+    def getCategoriesModel(self) -> List[str]:
+        return self.get_categories_model()
+
+    @Slot(str, result=int)
+    def getCategoryIndex(self, category_name: str) -> int:
+        return self.get_category_index(category_name)
+
+    @Slot(str, result="QVariantList")
+    def searchActions(self, query: str) -> List[dict]:
+        return self.search_actions(query)
+
+    @Slot(result="QVariantList")
+    def getCategorizedActions(self) -> List[dict]:
+        return self.get_categorized_actions()
+
+    @Slot("QVariantMap", result=bool)
+    def addAction(self, action: dict) -> bool:
+        return self.add_action(dict(action))
+
+    @Slot("QVariantMap", result=bool)
+    def updateAction(self, action: dict) -> bool:
+        return self.update_action(dict(action))
+
+    @Slot(str, result=bool)
+    def deleteAction(self, action_id: str) -> bool:
+        return self.delete_action(action_id)
+
+    @Slot("QVariantMap", result=bool)
+    def duplicateAction(self, action: dict) -> bool:
+        return self.duplicate_action(dict(action))
+
+    @Slot("QVariantMap", result=bool)
+    def addCategory(self, category: dict) -> bool:
+        return self.add_category(dict(category))
+
+    @Slot("QVariantMap", result=bool)
+    def updateCategory(self, category: dict) -> bool:
+        return self.update_category(dict(category))
+
+    @Slot(str, result=bool)
+    def deleteCategory(self, category_id: str) -> bool:
+        return self.delete_category(category_id)
+
+    @Slot("QVariantMap", result=bool)
+    def updateSettings(self, settings: dict) -> bool:
+        return self.update_settings(dict(settings))
+
+    @Slot(result=bool)
+    def saveConfig(self) -> bool:
+        return self.save()
+
+    @Slot(bool)
+    def setAutoStart(self, enable: bool) -> None:
+        self.set_auto_start(enable)
+        self.save()
+
+    @Slot(result=bool)
+    def resetToDefaults(self) -> bool:
+        self.reset_to_defaults()
+        return True
+
+    @Slot(result=bool)
+    def restartAsAdmin(self) -> bool:
+        return self.restart_as_admin()
+
+    @Slot()
+    def openConfigFolder(self) -> None:
+        self.open_config_folder()
+
+    @Slot()
+    def openConfigFile(self) -> None:
+        self.open_config_file()
+
+    @Slot(result=bool)
+    def importConfig(self) -> bool:
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            None, "导入配置", str(self.config_dir), "YAML (*.yaml *.yml)"
+        )
+        if not path:
+            return False
+        return self.import_config(Path(path))
+
+    @Slot(result=bool)
+    def exportConfig(self) -> bool:
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            None, "导出配置", str(self.config_dir / "config.yaml"), "YAML (*.yaml *.yml)"
+        )
+        if not path:
+            return False
+        return self.export(Path(path))
+
+    @Slot("QVariantMap")
+    def executeAction(self, action: dict) -> None:
+        if self.action_executor is None:
+            self.showToast.emit("动作执行器未初始化", "error")
+            return
+        ok = self.action_executor.execute(dict(action))
+        if ok:
+            self.showToast.emit(f"已执行: {action.get('name', '')}", "success")
+        else:
+            self.showToast.emit(f"执行失败: {action.get('name', '')}", "error")

@@ -8,7 +8,7 @@ Frame {
     width: 96
     height: 96
     radius: 12
-    border.color: Theme.currentTheme.colors.borderColor
+    border.color: Theme.currentTheme.colors.cardBorderColor
     border.width: 1
     clip: true
     hoverable: false  // Disable built-in hover to avoid conflict
@@ -30,7 +30,7 @@ Frame {
         State {
             name: "pressed"
             when: isPressed
-            PropertyChanges { target: actionCard; background: Theme.currentTheme.colors.secondaryContainerColor; elevation: 1 }
+            PropertyChanges { target: actionCard; background: Theme.currentTheme.colors.cardSecondaryColor; elevation: 1 }
         }
     ]
     
@@ -82,8 +82,8 @@ Frame {
             maximumLineCount: 2
             font.pixelSize: 12
             font.bold: true
-            color: Theme.currentTheme.colors.textPrimaryColor
-            text: actionData.name
+            color: Theme.currentTheme.colors.textColor
+            text: actionData ? actionData.name : ""
         }
         
         // Hotkey hint
@@ -92,8 +92,8 @@ Frame {
             font.pixelSize: 8
             font.family: "Consolas"
             color: Theme.currentTheme.colors.textSecondaryColor
-            text: actionData.hotkey || ""
-            visible: actionData.hotkey && actionData.hotkey.length > 0
+            text: actionData && actionData.hotkey ? actionData.hotkey : ""
+            visible: !!(actionData && actionData.hotkey && actionData.hotkey.length > 0)
         }
     }
 }

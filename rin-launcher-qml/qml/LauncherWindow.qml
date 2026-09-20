@@ -14,7 +14,6 @@ FluentWindow {
     title: qsTr("Rin Launcher")
     titleEnabled: false
     
-    property var ConfigManager: null
     property var actionsModel: []
     property var categoriesModel: []
     property var filteredActions: []
@@ -93,9 +92,8 @@ FluentWindow {
     // Settings Dialog
     SettingsDialog {
         id: settingsDialog
-        ConfigManager: launcherWindow.ConfigManager
         onSettingsChanged: {
-            launcherWindow.ConfigManager.saveConfig()
+            ConfigManager.saveConfig()
             launcherWindow.refreshData()
         }
     }
@@ -126,9 +124,8 @@ FluentWindow {
     // Action Editor Dialog
     ActionEditorDialog {
         id: actionEditorDialog
-        ConfigManager: launcherWindow.ConfigManager
         onActionSaved: {
-            launcherWindow.ConfigManager.saveConfig()
+            ConfigManager.saveConfig()
             launcherWindow.refreshData()
         }
     }
@@ -136,19 +133,21 @@ FluentWindow {
     // Category Editor Dialog
     CategoryEditorDialog {
         id: categoryEditorDialog
-        ConfigManager: launcherWindow.ConfigManager
         onCategorySaved: {
-            launcherWindow.ConfigManager.saveConfig()
+            ConfigManager.saveConfig()
             launcherWindow.refreshData()
         }
     }
     
     // Toast/InfoBar for notifications
     Connections {
-        target: launcherWindow.ConfigManager
+        target: ConfigManager
         function onShowToast(message, severity) {
             floatLayer.createInfoBar({
-                severity: severity,
+                severity: severity === "success" ? Severity.Success
+                    : severity === "warning" ? Severity.Warning
+                    : severity === "error" ? Severity.Error
+                    : Severity.Info,
                 position: Position.BottomRight,
                 timeout: 3000,
                 closable: true,
