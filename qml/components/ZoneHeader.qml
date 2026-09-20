@@ -1,0 +1,41 @@
+import QtQuick 2.15
+import QtQuick.Layouts 2.15
+import RinUI
+
+// 区块标题：一个图标 + 主标题 + 右侧补充说明。
+//
+// 启动台的三段（软件区 / 工具区 / 简易设置）共用它，保证分区节奏一致。
+RowLayout {
+    id: header
+
+    property string iconKey: ""
+    property string title: ""
+    property string trailing: ""
+
+    Layout.fillWidth: true
+    spacing: 8
+
+    AppIcon {
+        Layout.alignment: Qt.AlignVCenter
+        iconKey: header.iconKey
+        iconSize: 18
+        tint: Theme.currentTheme.colors.primaryColor
+    }
+
+    Text {
+        Layout.alignment: Qt.AlignVCenter
+        font.bold: true
+        font.pixelSize: Theme.currentTheme.typography.bodySize + 1
+        color: Theme.currentTheme.colors.textColor
+        text: header.title
+    }
+
+    Text {
+        Layout.alignment: Qt.AlignVCenter
+        typography: Typography.Caption
+        color: Theme.currentTheme.colors.textSecondaryColor
+        text: header.trailing
+    }
+
+    Item { Layout.fillWidth: true }
+}

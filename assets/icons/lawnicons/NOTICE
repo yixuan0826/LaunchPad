@@ -1,0 +1,62 @@
+Lawnicons — third-party icon assets
+===================================
+
+Source : https://github.com/LawnchairLauncher/lawnicons
+Version: v2.18.0 (tag v2.18.0)
+License: Apache License 2.0 — full text in ./LICENSE
+Copyright: the Lawnicons authors and contributors
+           (see https://github.com/LawnchairLauncher/lawnicons/graphs/contributors)
+
+This directory is a curated subset of the upstream `svgs/` directory. Regenerate
+or extend it with:
+
+    python scripts/vendor_lawnicons.py --source /path/to/lawnicons/svgs
+
+Files used in this project (50)
+--------------------------------
+app_manager.svg                        generic_email.svg
+generic_audio_editor.svg               generic_files.svg
+generic_background_eraser.svg          generic_files_pro.svg
+generic_bluetooth.svg                  generic_flashlight.svg
+generic_book.svg                       generic_gallery.svg
+generic_braces.svg                     generic_gallery_dev.svg
+generic_browser.svg                    generic_games.svg
+generic_calculator_plus_minus_multi_equal.svg
+                                       generic_grid_3x3.svg
+generic_camera.svg                     generic_heart.svg
+generic_card.svg                       generic_keyboard.svg
+generic_chess.svg                      generic_lock.svg
+generic_clock.svg                      generic_microphone.svg
+generic_compass.svg                    generic_moon.svg
+generic_contacts.svg                   generic_notes.svg
+generic_dialer.svg                     generic_pdf_file.svg
+generic_download_arrow.svg             generic_pi.svg
+generic_download_circle.svg            generic_player.svg
+generic_earth.svg                      generic_player_pro.svg
+generic_earth_pro.svg                  generic_power.svg
+generic_printer.svg                    generic_search.svg
+generic_qr_reader.svg                  generic_settings.svg
+generic_rotation.svg                   generic_shell.svg
+generic_scanner.svg                    generic_silverware.svg
+generic_sudoku.svg                     generic_trash_can.svg
+generic_voice.svg                      honkai_star_rail.svg (application logo)
+
+Modifications
+-------------
+Per Apache License 2.0, section 4(b), the files have been MODIFIED:
+
+  The upstream SVGs ship as `width="192" height="192"` without a `viewBox`.
+  `viewBox="0 0 192 192"` was added to the 35 files that lacked one, so that
+  Qt's SVG renderer scales them deterministically instead of guessing a size.
+
+No path data, stroke width, colour or artwork was changed.
+
+Trademark notice
+----------------
+Apache License 2.0, section 6, does not grant trademark rights. `honkai_star_rail.svg`
+is Lawnicons' own monochrome rendition of a third-party product mark (Honkai: Star
+Rail, a trademark of its respective owner); it is used here only as this launcher's
+icon, not to imply any affiliation or endorsement.
+
+Every other bundled mark is a `generic_*` design contributed by Lawnicons for
+applications that have no dedicated icon, so no third-party brand is reproduced.
