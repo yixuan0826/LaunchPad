@@ -389,7 +389,9 @@ Item {
             if (needle.length === 0) {
                 return true
             }
+            // 和启动台的搜索保持一致：名字与悬停提示都算命中。
             return (item.name || "").toLowerCase().indexOf(needle) !== -1
+                || (item.tooltip || "").toLowerCase().indexOf(needle) !== -1
         }).sort(function (a, b) {
             return (a.order || 0) - (b.order || 0)
         })

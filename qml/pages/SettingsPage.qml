@@ -382,7 +382,7 @@ Item {
                             spacing: 8
                             Hyperlink {
                                 text: qsTr("项目仓库")
-                                openUrl: "https://github.com/yixuan0826/LaunchPad"
+                                openUrl: "https://github.com/yixuan0826/RinLauncher"
                             }
                             Hyperlink {
                                 text: qsTr("RinUI")
