@@ -2,10 +2,10 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import RinUI
 
-// 常驻小窗网格里的一个条目卡片。
+// 常驻小窗第一行里的一格：图标在上、单行标题在下。
 //
-// 没有复用 EntryTile：那个是给大窗口 96~144px 方块用的，字号写死在 12px，
-// 缩到小窗的 66px 会把两行标题挤成一团。这里改成图标在上、单行标题在下。
+// 没有复用 EntryTile：那个是给完整窗口 96~144px 方块用的，字号写死在 12px，
+// 缩到小窗的 92px 会把两行标题挤成一团。
 Item {
     id: tile
 
@@ -15,11 +15,13 @@ Item {
     signal activated(var entry)
     signal menuRequested(var entry, real sceneX, real sceneY)
 
+    // 槽位固定 4 个，还没配的那格也要占着位置。
+    readonly property bool empty: !entry || !entry.id
     readonly property bool entryDisabled: entry ? entry.enabled === false : false
 
     width: tileSize
     height: tileSize
-    opacity: entryDisabled ? 0.45 : 1
+    opacity: empty ? 0.28 : (entryDisabled ? 0.45 : 1)
 
     Rectangle {
         anchors.fill: parent
@@ -27,8 +29,10 @@ Item {
         color: pointer.pressed || pointer.hovered
             ? Theme.currentTheme.colors.controlSecondaryColor
             : "transparent"
-        border.width: pointer.hovered ? 1 : 0
-        border.color: Theme.currentTheme.colors.primaryColor
+        border.width: pointer.hovered || tile.empty ? 1 : 0
+        border.color: tile.empty
+            ? Theme.currentTheme.colors.cardBorderColor
+            : Theme.currentTheme.colors.primaryColor
 
         Behavior on color {
             ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
@@ -42,9 +46,9 @@ Item {
 
         AppIcon {
             anchors.horizontalCenter: parent.horizontalCenter
-            iconKey: tile.entry ? tile.entry.icon : ""
+            iconKey: tile.empty ? "ic_fluent_add_20_regular" : tile.entry.icon
             iconSize: Math.round(tile.tileSize * 0.34)
-            tint: tile.entryDisabled
+            tint: tile.empty || tile.entryDisabled
                 ? Theme.currentTheme.colors.textSecondaryColor
                 : Theme.currentTheme.colors.primaryColor
         }
@@ -56,7 +60,7 @@ Item {
             maximumLineCount: 1
             font.pixelSize: 10
             color: Theme.currentTheme.colors.textColor
-            text: tile.entry ? tile.entry.name : ""
+            text: tile.empty ? qsTr("未设置") : tile.entry.name
         }
     }
 

@@ -56,7 +56,7 @@ class Launcher:
         self.config_manager = ConfigManager()
         self.config_manager.action_executor = ActionExecutor(self.config_manager)
 
-        # 两个 QML 根：常驻桌面右下角的小窗（启动台）和完整窗口（档案 / 设置）。
+        # 两个 QML 根：常驻桌面右下角的小窗（启动台本体）和完整窗口（启动台设置 / 档案 / 设置）。
         self.window: RinUIWindow | None = None
         self.compact: RinUIWindow | None = None
         self.tray = TrayIcon(ICON_FILE)

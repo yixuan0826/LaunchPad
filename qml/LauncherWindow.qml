@@ -19,19 +19,20 @@ FluentWindow {
     title: qsTr("Rin Launcher")
     titleEnabled: false
 
-    // 托盘菜单和启动台页都通过这个属性切页：setProperty("requestedPage", "settings")。
+    // 托盘菜单和设置页都通过这个属性切页：setProperty("requestedPage", "settings")。
     property string requestedPage: ""
 
     // 关闭按钮不直接退出，交给 Python 判断该隐藏（有托盘）还是真退出。
     signal closeRequested()
 
+    // 启动台本身已经是桌面右下角那块小窗了，这里的「启动台」页是它的设置面板。
     readonly property var pageKeys: ({ "launcher": 0, "records": 1, "settings": 2 })
 
     navigationItems: [
         {
             "title": qsTr("启动台"),
             "icon": "ic_fluent_apps_20_regular",
-            "page": Qt.resolvedUrl("pages/LauncherPage.qml")
+            "page": Qt.resolvedUrl("pages/LauncherSettingsPage.qml")
         },
         {
             "title": qsTr("档案"),

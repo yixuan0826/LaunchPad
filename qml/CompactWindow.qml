@@ -10,16 +10,13 @@ import RinUI
 import QtQuick.Window 2.15
 
 import "components"
-import "dialogs"
 
 // 常驻桌面右下角的启动台小窗。
 //
-// 版式参考希沃桌面助手 / Ink Workspace 那类桌面挂件：无边框、半透明卡片、竖版
-// 一块贴在桌面角落。自上而下是「状态条 → 搜索 → 分区网格 → 工具 → 快捷设置 →
-// 底部操作条」，上面那段是拖拽区。
-//
-// 档案与设置仍然由大窗口（LauncherWindow）承载 —— 小窗只负责「点一下就用」，
-// 需要编辑和维护的活儿走 openMainRequested 交给主窗口。
+// 只有三行固定槽位，对齐希沃桌面助手那类桌面挂件的形态：
+//   第一行 4 个常用应用，第二行 6 个快捷功能，第三行 1 个存储位置 + 打开 U 盘。
+// 槽位内容由完整窗口的「启动台」页配置，存在 config.yaml 的 launcher 段里。
+// 高度固定为桌面可用高度的一半。
 Window {
     id: compact
 
@@ -29,8 +26,8 @@ Window {
     readonly property int edgeMargin: 16      // 贴边时与桌面边缘的距离
     readonly property int contentMargin: 14
 
-    width: 348
-    height: 584
+    width: 400
+    height: Math.max(400, Math.round(Screen.desktopAvailableHeight / 2))
     visible: false
     color: "transparent"
     title: qsTr("Rin Launcher")
@@ -39,21 +36,23 @@ Window {
     // 两边都写会互相打架。
     flags: Qt.FramelessWindowHint | Qt.Tool
 
-    // ── 网格 ──
+    // ── 尺寸 ──
     readonly property real cardWidth: width - shadowMargin * 2
-    readonly property real gridWidth: cardWidth - contentMargin * 2
-    readonly property int gridColumns: 4
-    readonly property int gridSpacing: 12
-    readonly property real tileSize: Math.floor(
-        (gridWidth - (gridColumns - 1) * gridSpacing) / gridColumns)
-    // 分区标题与网格要一起夹到「每行正好 N 格」的宽度，两者才对得齐。
-    readonly property real maxGridWidth: gridColumns * tileSize
-        + (gridColumns - 1) * gridSpacing
+    readonly property real innerWidth: cardWidth - contentMargin * 2
+    readonly property int appSlotsCount: 4
+    readonly property int toolSlotsCount: 6
+    readonly property int appGap: 10
+    readonly property int toolGap: 8
+    // 第一行每格边长：按可用宽度四等分，再夹住上下限，免得太小或撑爆。
+    readonly property real appTileSize: Math.max(56, Math.min(92,
+        Math.floor((innerWidth - (appSlotsCount - 1) * appGap) / appSlotsCount)))
+    readonly property real toolCellWidth: Math.floor(
+        (innerWidth - (toolSlotsCount - 1) * toolGap) / toolSlotsCount)
 
     // ── 状态 ──
-    property var sections: []
-    property int actionCount: 0
-    property bool searching: false
+    property var apps: []
+    property var tools: []
+    property var storage: ({})
     property date now: new Date()
     property bool cornerPinned: true
     // 从 settings 同步过来的一份镜像：直接写 ConfigManager.getSettings() 既不会随
@@ -64,21 +63,6 @@ Window {
     signal openMainRequested(string page)
     signal hideRequested()
     signal quitRequested()
-
-    readonly property var tools: [
-        { "title": qsTr("打开配置目录"), "icon": "ic_fluent_folder_open_20_regular",
-          "kind": "configFolder" },
-        { "title": qsTr("重新加载配置"), "icon": "ic_fluent_arrow_sync_20_regular",
-          "kind": "reload" },
-        { "title": qsTr("档案管理"), "icon": "ic_fluent_book_20_regular",
-          "kind": "records" },
-        { "title": qsTr("设置"), "icon": "ic_fluent_settings_20_regular",
-          "kind": "settings" },
-        { "title": qsTr("打开完整窗口"), "icon": "ic_fluent_window_20_regular",
-          "kind": "main" },
-        { "title": qsTr("以管理员身份重启"), "icon": "ic_fluent_shield_20_regular",
-          "kind": "elevate" }
-    ]
 
     // ------------------------------------------------------------------
     // 位置：默认贴右下角；拖动过就记住坐标，直到在菜单里点「回到右下角」。
@@ -112,7 +96,7 @@ Window {
     }
 
     // ------------------------------------------------------------------
-    // 内容
+    // 界面
     // ------------------------------------------------------------------
     Item {
         anchors.fill: parent
@@ -142,66 +126,42 @@ Window {
         ColumnLayout {
             anchors.fill: card
             anchors.margins: compact.contentMargin
-            spacing: 10
+            spacing: 12
 
-            // ── ① 状态条（也是拖拽区）──
+            // ── 状态条（也是拖拽区）──
             Item {
                 id: statusBar
                 Layout.fillWidth: true
-                Layout.preferredHeight: 58
+                Layout.preferredHeight: 52
 
                 RowLayout {
                     anchors.fill: parent
                     spacing: 8
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        spacing: 0
-
-                        Text {
-                            font.pixelSize: 30
-                            font.bold: true
-                            color: Theme.currentTheme.colors.textColor
-                            text: Qt.formatDateTime(compact.now, "HH:mm")
-                        }
-
-                        Text {
-                            font.pixelSize: 11
-                            color: Theme.currentTheme.colors.textSecondaryColor
-                            text: Qt.formatDateTime(compact.now, "M月d日")
-                                + " " + compact.weekdayName(compact.now)
-                        }
+                    Text {
+                        font.pixelSize: 28
+                        font.bold: true
+                        color: Theme.currentTheme.colors.textColor
+                        text: Qt.formatDateTime(compact.now, "HH:mm")
                     }
 
-                    ColumnLayout {
-                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                        spacing: 4
+                    Text {
+                        Layout.alignment: Qt.AlignBottom
+                        Layout.bottomMargin: 5
+                        font.pixelSize: 11
+                        color: Theme.currentTheme.colors.textSecondaryColor
+                        text: Qt.formatDateTime(compact.now, "M月d日")
+                            + " " + compact.weekdayName(compact.now)
+                    }
 
-                        Text {
-                            Layout.alignment: Qt.AlignRight
-                            font.pixelSize: 11
-                            color: Theme.currentTheme.colors.textSecondaryColor
-                            text: qsTr("%1 个条目").arg(compact.actionCount)
-                        }
+                    Item { Layout.fillWidth: true }
 
-                        Row {
-                            Layout.alignment: Qt.AlignRight
-                            spacing: 6
-
-                            AppIcon {
-                                iconKey: "ic_fluent_pin_20_regular"
-                                iconSize: 14
-                                tint: Theme.currentTheme.colors.primaryColor
-                                visible: compact.alwaysOnTop
-                            }
-
-                            AppIcon {
-                                iconKey: "ic_fluent_clock_20_regular"
-                                iconSize: 14
-                                tint: Theme.currentTheme.colors.textSecondaryColor
-                            }
-                        }
+                    AppIcon {
+                        Layout.alignment: Qt.AlignVCenter
+                        iconKey: "ic_fluent_pin_20_regular"
+                        iconSize: 14
+                        tint: Theme.currentTheme.colors.primaryColor
+                        visible: compact.alwaysOnTop
                     }
                 }
 
@@ -219,170 +179,194 @@ Window {
                 }
             }
 
-            // ── ② 搜索 ──
-            TextField {
-                id: searchField
-                Layout.fillWidth: true
-                placeholderText: qsTr("搜索应用、文件、命令…")
-                clearEnabled: true
-                onTextChanged: compact.applyFilter(text)
-            }
-
-            // ── ③ 分区网格（可滚动）──
-            Flickable {
-                id: scroller
+            // ── 第一行：4 个常用应用 ──
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                clip: true
-                contentWidth: width
-                contentHeight: contentColumn.implicitHeight + 8
-                ScrollBar.vertical: ScrollBar {}
+                Layout.minimumHeight: 86
 
-                ColumnLayout {
-                    id: contentColumn
-                    x: 0
-                    width: scroller.width
-                    spacing: 12
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: compact.appGap
 
                     Repeater {
-                        // objectName 是给无头验收脚本定位这个 Repeater 用的。
-                        objectName: "sectionsRepeater"
-                        model: compact.sections
+                        objectName: "appSlotsRepeater"
+                        model: compact.apps
 
-                        delegate: ColumnLayout {
-                            id: sectionBox
-
-                            property var sectionData: modelData
-
-                            Layout.fillWidth: true
-                            Layout.maximumWidth: compact.maxGridWidth
-                            spacing: 8
-
-                            ZoneHeader {
-                                iconKey: sectionBox.sectionData.categoryIcon
-                                title: sectionBox.sectionData.categoryName
-                                trailing: qsTr("%1 项").arg(
-                                    sectionBox.sectionData.actions.length)
-                            }
-
-                            Flow {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: childrenRect.height
-                                spacing: compact.gridSpacing
-
-                                Repeater {
-                                    model: sectionBox.sectionData.actions
-
-                                    delegate: CompactTile {
-                                        entry: modelData
-                                        tileSize: compact.tileSize
-                                        onActivated: compact.runEntry(modelData)
-                                        onMenuRequested: compact.showEntryMenu(
-                                            modelData, sceneX, sceneY)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 空状态
-                    Frame {
-                        Layout.fillWidth: true
-                        implicitHeight: 120
-                        visible: compact.sections.length === 0
-
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 8
-
-                            AppIcon {
-                                Layout.alignment: Qt.AlignHCenter
-                                iconKey: "ic_fluent_search_20_regular"
-                                iconSize: 24
-                                tint: Theme.currentTheme.colors.textSecondaryColor
-                            }
-
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                horizontalAlignment: Text.AlignHCenter
-                                width: 220
-                                wrapMode: Text.Wrap
-                                color: Theme.currentTheme.colors.textSecondaryColor
-                                text: compact.searching
-                                    ? qsTr("没有匹配的条目")
-                                    : qsTr("启动台还是空的")
-                            }
-                        }
-                    }
-
-                    // ── ④ 工具 ──
-                    ZoneHeader {
-                        Layout.topMargin: 4
-                        iconKey: "ic_fluent_wrench_20_regular"
-                        title: qsTr("工具")
-                    }
-
-                    Flow {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: childrenRect.height
-                        spacing: 4
-
-                        Repeater {
-                            model: compact.tools
-
-                            delegate: ToolButton {
-                                icon.name: modelData.icon
-                                ToolTip.text: modelData.title
-                                onClicked: compact.runTool(modelData.kind)
-                            }
-                        }
-                    }
-
-                    // ── ⑤ 快捷设置 ──
-                    ZoneHeader {
-                        Layout.topMargin: 4
-                        iconKey: "ic_fluent_settings_20_regular"
-                        title: qsTr("快捷设置")
-                    }
-
-                    FormRow {
-                        label: qsTr("主题")
-                        labelWidth: 48
-
-                        ComboBox {
-                            id: themeCombo
-                            Layout.preferredWidth: 150
-                            model: [qsTr("跟随系统"), qsTr("浅色"), qsTr("深色")]
-                            // 用 Connections 而不是 onCurrentIndexChanged：RinUI 的
-                            // ComboBox 内部已经定义过同名处理函数，外部再写会把它覆盖掉。
-                            Connections {
-                                target: themeCombo
-                                function onCurrentIndexChanged() {
-                                    if (themeCombo.currentIndex >= 0) {
-                                        compact.setSetting(
-                                            "theme",
-                                            ["system", "light", "dark"][themeCombo.currentIndex])
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    FormRow {
-                        label: qsTr("置顶")
-                        labelWidth: 48
-
-                        Switch {
-                            id: topSwitch
-                            checkedText: qsTr("开")
-                            uncheckedText: qsTr("关")
-                            onCheckedChanged: compact.setSetting("alwaysOnTop", checked)
+                        delegate: CompactTile {
+                            entry: modelData && modelData.id ? modelData : null
+                            tileSize: compact.appTileSize
+                            onActivated: compact.runEntry(modelData)
+                            onMenuRequested: compact.showEntryMenu(modelData, sceneX, sceneY)
                         }
                     }
                 }
             }
 
-            // ── ⑥ 底部操作条 ──
+            // ── 第二行：6 个快捷功能 ──
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 62
+
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: compact.toolGap
+
+                    Repeater {
+                        objectName: "toolSlotsRepeater"
+                        model: compact.tools
+
+                        delegate: Item {
+                            width: compact.toolCellWidth
+                            height: 58
+                            opacity: modelData && modelData.key ? 1 : 0.35
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 10
+                                color: pointer.pressed || pointer.hovered
+                                    ? Theme.currentTheme.colors.controlSecondaryColor
+                                    : "transparent"
+
+                                Behavior on color {
+                                    ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+                                }
+                            }
+
+                            Column {
+                                anchors.centerIn: parent
+                                width: parent.width
+                                spacing: 3
+
+                                AppIcon {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    iconKey: modelData && modelData.icon
+                                        ? modelData.icon : "ic_fluent_dismiss_20_regular"
+                                    iconSize: 22
+                                    tint: Theme.currentTheme.colors.primaryColor
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    horizontalAlignment: Text.AlignHCenter
+                                    // 每格只有 ~57px，标题四五个字就装不下，允许折成两行，
+                                    // 不然会变成「打开配置…」这种读不出意思的省略号。
+                                    wrapMode: Text.Wrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                    lineHeight: 0.95
+                                    font.pixelSize: 10
+                                    color: Theme.currentTheme.colors.textColor
+                                    text: modelData && modelData.title ? modelData.title : ""
+                                }
+                            }
+
+                            MouseArea {
+                                id: pointer
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: !!(modelData && modelData.key)
+                                onClicked: compact.runTool(modelData.key)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── 第三行：存储位置 + 打开 U 盘 ──
+            Frame {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 74
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.rightMargin: 104   // 右侧留给 U 盘按钮
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: compact.openStorage()
+                    ToolTip.text: compact.storage.available
+                        ? qsTr("%1\n剩余 %2 / 共 %3")
+                            .arg(compact.storage.path)
+                            .arg(compact.storage.free)
+                            .arg(compact.storage.total)
+                        : String(compact.storage.path || "")
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 10
+                    anchors.topMargin: 10
+                    anchors.bottomMargin: 10
+                    spacing: 10
+
+                    AppIcon {
+                        Layout.alignment: Qt.AlignVCenter
+                        iconKey: "ic_fluent_storage_20_regular"
+                        iconSize: 24
+                        tint: Theme.currentTheme.colors.primaryColor
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 3
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            Text {
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Theme.currentTheme.colors.textColor
+                                text: compact.storage.label || qsTr("存储位置")
+                            }
+
+                            Text {
+                                font.pixelSize: 10
+                                color: Theme.currentTheme.colors.textSecondaryColor
+                                // 这一行宽度很紧：带上总量会把左边的目录名挤成「w...e」，
+                                // 总量挪到提示气泡里，进度条本身也表达了占比。
+                                text: compact.storage.available
+                                    ? qsTr("剩余 %1").arg(compact.storage.free)
+                                    : qsTr("容量未知")
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 4
+                            radius: 2
+                            color: Theme.currentTheme.colors.controlSecondaryColor
+
+                            Rectangle {
+                                height: parent.height
+                                radius: parent.radius
+                                width: parent.width * Math.min(100,
+                                    Math.max(0, compact.storage.percent || 0)) / 100
+                                color: Theme.currentTheme.colors.primaryColor
+                            }
+                        }
+                    }
+
+                    Button {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: qsTr("U 盘")
+                        icon.name: "ic_fluent_hard_drive_20_regular"
+                        ToolTip.text: compact.storage.drive
+                            ? qsTr("打开 %1").arg(compact.storage.drive)
+                            : qsTr("未检测到可移动磁盘")
+                        onClicked: ConfigManager.openRemovableDrive()
+                    }
+                }
+            }
+
+            // ── 底部操作条 ──
             RowLayout {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 34
@@ -480,21 +464,9 @@ Window {
         }
         MenuSeparator {}
         MenuItem {
-            text: entryMenu.entry && entryMenu.entry.enabled === false ? qsTr("启用") : qsTr("停用")
-            icon.name: "ic_fluent_eye_20_regular"
-            onTriggered: ConfigManager.toggleAction(
-                entryMenu.entry.id, entryMenu.entry.enabled === false)
-        }
-        MenuItem {
-            text: qsTr("在档案里编辑…")
+            text: qsTr("换一个应用…")
             icon.name: "ic_fluent_edit_20_regular"
-            onTriggered: compact.openMain("records")
-        }
-        MenuSeparator {}
-        MenuItem {
-            text: qsTr("删除…")
-            icon.name: "ic_fluent_delete_20_regular"
-            onTriggered: compact.confirmDelete(entryMenu.entry)
+            onTriggered: compact.openMain("launcher")
         }
     }
 
@@ -503,14 +475,19 @@ Window {
         position: Position.None
 
         MenuItem {
-            text: qsTr("回到右下角")
-            icon.name: "ic_fluent_pin_20_regular"
-            onTriggered: compact.snapToCorner()
+            text: qsTr("启动台设置…")
+            icon.name: "ic_fluent_apps_20_regular"
+            onTriggered: compact.openMain("launcher")
         }
         MenuItem {
             text: qsTr("打开完整窗口")
             icon.name: "ic_fluent_window_20_regular"
-            onTriggered: compact.openMain("launcher")
+            onTriggered: compact.openMain("records")
+        }
+        MenuItem {
+            text: qsTr("回到右下角")
+            icon.name: "ic_fluent_pin_20_regular"
+            onTriggered: compact.snapToCorner()
         }
         MenuSeparator {}
         MenuItem {
@@ -523,12 +500,6 @@ Window {
             icon.name: "ic_fluent_power_20_regular"
             onTriggered: compact.quitRequested()
         }
-    }
-
-    ConfirmDialog {
-        id: confirmDialog
-        // 默认的 420px 比这个小窗还宽，会把按钮挤出窗口外面。
-        width: 288
     }
 
     Timer {
@@ -547,7 +518,7 @@ Window {
     Connections {
         target: ConfigManager
 
-        // 配置每次成功写入都会发这个信号，网格因此不需要每个对话框来推它。
+        // 配置每次成功写入都会发这个信号，小窗据此重取三行槽位。
         function onConfigChanged() {
             compact.reload()
         }
@@ -563,23 +534,13 @@ Window {
     // 数据
     // ------------------------------------------------------------------
     function reload() {
-        var actions = ConfigManager.getActions()
-        actionCount = actions.length
-        sections = searching
-            ? ConfigManager.searchActions(searchField.text)
-            : ConfigManager.getCategorizedActions()
+        apps = ConfigManager.getLauncherApps()
+        tools = ConfigManager.getLauncherTools()
+        storage = ConfigManager.getStorageInfo()
     }
 
     function syncSettings() {
-        var settings = ConfigManager.getSettings()
-        themeCombo.currentIndex = Math.max(0, ["system", "light", "dark"].indexOf(settings.theme))
-        topSwitch.checked = settings.alwaysOnTop !== false
-        alwaysOnTop = settings.alwaysOnTop !== false
-    }
-
-    function applyFilter(text) {
-        searching = text.length > 0
-        sections = ConfigManager.searchActions(text)
+        alwaysOnTop = ConfigManager.getSettings().alwaysOnTop !== false
     }
 
     // 只在值真的变了才落盘：反复同步时不会白白重写配置。
@@ -601,17 +562,14 @@ Window {
     // 交互
     // ------------------------------------------------------------------
     function runEntry(entry) {
-        if (!entry) {
+        if (!entry || !entry.id) {
             return
         }
         ConfigManager.executeAction(entry)
-        if (searching) {
-            searchField.text = ""
-        }
     }
 
     function runEntryAsAdmin(entry) {
-        if (!entry) {
+        if (!entry || !entry.id) {
             return
         }
         var elevated = JSON.parse(JSON.stringify(entry))
@@ -619,8 +577,8 @@ Window {
         ConfigManager.executeAction(elevated)
     }
 
-    function runTool(kind) {
-        switch (kind) {
+    function runTool(key) {
+        switch (key) {
         case "configFolder":
             ConfigManager.openConfigFolder()
             break
@@ -630,6 +588,12 @@ Window {
         case "elevate":
             ConfigManager.restartAsAdmin()
             break
+        case "usb":
+            ConfigManager.openRemovableDrive()
+            break
+        case "hide":
+            compact.hideRequested()
+            break
         case "records":
             compact.openMain("records")
             break
@@ -637,27 +601,26 @@ Window {
             compact.openMain("settings")
             break
         case "main":
-            compact.openMain("launcher")
+            compact.openMain("records")
             break
         }
     }
 
-    // 小窗是独立的 QML 根，够不到主窗口，跨窗口的请求统一走信号交给 Python。
+    function openStorage() {
+        ConfigManager.openPath(compact.storage.path || "")
+    }
+
+    // 小窗是独立的 QML 根，够不到完整窗口，跨窗口的请求统一走信号交给 Python。
     function openMain(page) {
         compact.openMainRequested(page)
     }
 
     function showEntryMenu(entry, sceneX, sceneY) {
+        if (!entry || !entry.id) {
+            return
+        }
         entryMenu.entry = entry
         var local = compact.contentItem.mapFromItem(null, sceneX, sceneY)
         entryMenu.popup(Qt.point(local.x, local.y))
-    }
-
-    function confirmDelete(entry) {
-        if (!entry) {
-            return
-        }
-        confirmDialog.ask(qsTr("确定要删除条目“%1”吗？此操作不可撤销。").arg(entry.name),
-                          function () { ConfigManager.deleteAction(entry.id) })
     }
 }
