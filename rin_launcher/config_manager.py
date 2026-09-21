@@ -38,6 +38,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "autoStart": False,
     "alwaysOnTop": True,
     "globalHotkey": "Ctrl+Space",
+    # 常驻小窗的位置，写成 "x,y"；空串表示还没拖过，按右下角摆放。
+    "compactPos": "",
     "searchEngine": "https://www.bing.com/search?q={query}",
     "gridColumns": 8,
     "itemSize": 96,

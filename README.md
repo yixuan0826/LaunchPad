@@ -1,9 +1,10 @@
 # Rin Launcher
 
-基于 **RinUI（PySide6 + QML）** 的桌面启动台，版式参考希沃桌面助手的「侧边栏 + 面板」。
-启动台负责"点一下就用"，档案页负责"把东西管起来"，设置页负责"照自己的习惯调"。
+基于 **RinUI（PySide6 + QML）** 的桌面启动台。常驻在桌面右下角的**小窗**负责「点一下就用」，
+**完整窗口**负责「把东西管起来、照自己的习惯调」。
 
-- 主界面：`FluentWindow` + RinUI `NavigationView`（侧边导航 / 启动台 · 档案 · 设置）
+- 常驻小窗：无边框半透明挂件，锚在桌面右下角，可拖动并记住位置
+- 完整窗口：`FluentWindow` + RinUI `NavigationView`（侧边导航 / 启动台 · 档案 · 设置）
 - 图标：RinUI 的 Fluent 字体图标 + 随包的 50 个 [Lawnicons](https://github.com/LawnchairLauncher/lawnicons) SVG，可混用
 - 配置：一份可读的 YAML，带自动备份、外部修改热加载
 - 目标平台：Windows 10/11（UAC 提权、开机启动、注册表相关功能仅 Windows 可用）
@@ -14,6 +15,7 @@
 
 | | |
 | --- | --- |
+| 🪟 **常驻小窗** | 无边框半透明挂件锚在桌面右下角；分区网格 + 输入即筛 + 条目右键菜单，可拖动并记住位置 |
 | 🚀 **启动台** | 分区网格 + 输入即筛的搜索，仿希沃的三段结构：软件区 / 工具区 / 简易设置 |
 | 🖱 **右键菜单** | 条目上右键即可 打开 · 提权打开 · 编辑 · 复制 · 启停 · 上移 · 下移 · 删除 |
 | 🗂 **档案编辑器** | 分区与条目的可视化增删改、排序、启停，全程不用手改 YAML |
@@ -28,22 +30,33 @@
 
 ## 界面导览
 
-### 启动台
+程序起来后有两块界面：**常驻小窗**（启动台）和**完整窗口**（档案 / 设置）。
 
-自上而下三块，对齐希沃侧边栏的组织方式：
+### 常驻小窗（启动台）
 
-1. **顶部工具条** — 搜索框、`新建条目`、一键折叠/展开全部分区、重载配置
-2. **软件区** — 按分区成组的条目卡片网格。分区标题栏可点击折叠，卡片右键出菜单
-3. **工具区** — 打开配置目录、重载配置、跳档案、跳设置、以管理员身份重启
-4. **简易设置** — 主题模式、窗口置顶、托盘图标、条目尺寸，改完即写盘
+一块无边框、半透明的竖版卡片贴在桌面右下角，自上而下：
 
-### 档案
+1. **状态条** — 时间、日期与星期、条目总数，右侧小图标提示是否置顶；这一条同时是拖拽区
+2. **搜索框** — 输入即筛，清空即恢复
+3. **分区网格** — 按分区成组的条目卡片，每行 4 格；左键启动，右键出菜单
+4. **工具** — 打开配置目录、重载配置、跳档案、跳设置、打开完整窗口、以管理员身份重启
+5. **快捷设置** — 主题模式、窗口置顶，改完即写盘
+6. **底部条** — `打开完整窗口` + 档案 / 设置 / 更多（回到右下角 · 隐藏小窗 · 退出）
 
-左边是分区清单（改名 / 换图标 / 排序 / 删除），右边是选中分区里的条目
-（启停开关 + 上移 / 下移 / 编辑 / 复制 / 删除）。右上角可导入导出整份配置。
-顶部的过滤框按名字或悬停提示筛选条目。
+拖状态条就能移动窗口，位置写进 `settings.compactPos`，下次启动回到原处；想让它重新贴回
+右下角，用底部「更多 → 回到右下角」。
 
-未选中分区时右侧显示**全部条目**。
+窗口**不会被关闭按钮关掉**（它没有标题栏）—— 隐藏与退出都在「更多」菜单和托盘里。
+
+### 完整窗口
+
+侧边三页：
+
+- **启动台** — 段结构与小窗一致，但铺在大窗口里，多了「新建条目」入口和分区折叠开关
+- **档案** — 左边是分区清单（改名 / 换图标 / 排序 / 删除），右边是选中分区里的条目
+  （启停开关 + 上移 / 下移 / 编辑 / 复制 / 删除）。右上角可导入导出整份配置。
+  顶部的过滤框按名字或悬停提示筛选条目。未选中分区时右侧显示**全部条目**。
+- **设置** — 见下表
 
 ### 设置
 
@@ -59,13 +72,14 @@
 ### 托盘与热键
 
 托盘菜单：`显示 / 隐藏 Rin Launcher`、`启动台`、`档案`、`设置`、`打开配置目录`、
-`重新加载配置`、`退出`；左键单击托盘图标等于显示/隐藏切换。
+`重新加载配置`、`退出`；左键单击托盘图标等于显示/隐藏切换。菜单里的「启动台」打开的是
+**常驻小窗**，「档案」「设置」才去开完整窗口。
 
-窗口右上角的关闭按钮**不会退出程序**：托盘可用时收进托盘，托盘不可用（或在设置里
-关掉了托盘）才真正退出。
+完整窗口右上角的关闭按钮**只收起它自己**，常驻小窗照常跑着。只有当托盘不可用、小窗也没
+显示时，关闭才会真的退出程序。
 
-全局热键默认 `Ctrl+Space`。热键必须**至少含一个修饰键**（Ctrl / Alt / Shift / Win）——
-裸键会拦截系统里的正常输入，所以留空或只按一个普通键都不会注册。
+全局热键默认 `Ctrl+Space`，用来显示 / 隐藏常驻小窗。热键必须**至少含一个修饰键**
+（Ctrl / Alt / Shift / Win）—— 裸键会拦截系统里的正常输入，所以留空或只按一个普通键都不会注册。
 
 ---
 
@@ -93,7 +107,7 @@ pip install -r requirements.txt
 python -m rin_launcher.main
 ```
 
-首次运行会在配置目录生成一份带默认分区的 `config.yaml`，并直接显示启动台。
+首次运行会在配置目录生成一份带默认分区的 `config.yaml`，并在桌面右下角显示常驻小窗。
 
 ### 打包
 
@@ -156,8 +170,9 @@ settings:
   autoStart: false
   alwaysOnTop: true
   globalHotkey: "Ctrl+Space"
-  gridColumns: 8                      # 每行摆几个条目
-  itemSize: 96                        # 条目卡片边长（72–144）
+  compactPos: ""                      # 常驻小窗位置 "x,y"，空串 = 贴右下角
+  gridColumns: 8                      # 完整窗口每行摆几个条目
+  itemSize: 96                        # 完整窗口的条目卡片边长（72–144）
   blurBackground: true
   logLevel: "INFO"                    # DEBUG | INFO | WARNING | ERROR
 ```
@@ -168,13 +183,14 @@ settings:
 | --- | --- | --- |
 | `theme` | `system` | 主题模式，改动即时切换 |
 | `accentColor` | `#0078d4` | 强调色，改动即时切换 |
-| `showTray` | `true` | 是否创建托盘图标；关掉后关闭窗口即退出 |
-| `startMinimized` | `false` | 启动时不显示窗口，只驻留托盘 |
+| `showTray` | `true` | 是否创建托盘图标 |
+| `startMinimized` | `false` | 启动时不显示常驻小窗 |
 | `autoStart` | `false` | 开机自启，写 `HKCU\...\Run`（仅 Windows） |
-| `alwaysOnTop` | `true` | 窗口置顶 |
-| `globalHotkey` | `Ctrl+Space` | 全局热键 |
-| `gridColumns` | `8` | 启动台每行的条目数 |
-| `itemSize` | `96` | 条目卡片边长 |
+| `alwaysOnTop` | `true` | 常驻小窗置顶；完整窗口保持普通窗口行为 |
+| `globalHotkey` | `Ctrl+Space` | 全局热键，切换常驻小窗显示/隐藏 |
+| `compactPos` | `""` | 常驻小窗位置，`"x,y"`；空串表示贴右下角（由「回到右下角」写回空） |
+| `gridColumns` | `8` | 完整窗口启动台每行的条目数 |
+| `itemSize` | `96` | 完整窗口的条目卡片边长 |
 | `blurBackground` | `true` | 亚克力背景（仅 Windows 生效） |
 | `logLevel` | `INFO` | 日志级别，**改动需重启生效** |
 | `language` | `zh_CN` | 预留，界面目前只有中文 |
@@ -282,10 +298,11 @@ python scripts/vendor_lawnicons.py --source /path/to/lawnicons/svgs
 │   ├── tray.py                  # 系统托盘（QSystemTrayIcon + QMenu）
 │   └── elevation.py             # Windows UAC 提权 / 开机启动
 ├── qml/
-│   ├── LauncherWindow.qml       # 主窗口（FluentWindow + NavigationView）
+│   ├── CompactWindow.qml        # 常驻桌面右下角的小窗（启动台）
+│   ├── LauncherWindow.qml       # 完整窗口（FluentWindow + NavigationView）
 │   ├── pages/                   # 启动台 / 档案 / 设置
 │   ├── dialogs/                 # 条目编辑器、分区编辑器、图标选择器、确认框
-│   ├── components/              # AppIcon / EntryTile / CategorySection / FormRow …
+│   ├── components/              # AppIcon / EntryTile / CompactTile / CategorySection / FormRow …
 │   └── qmldir
 ├── RinUI/                       # RinUI 库（内联，MIT）
 ├── assets/
@@ -300,6 +317,24 @@ python scripts/vendor_lawnicons.py --source /path/to/lawnicons/svgs
 
 ## 实现说明
 
+**常驻小窗为什么不用 `FluentWindow`？**
+`FluentWindow` 系（`FluentWindowBase`）在 Windows 上会主动补回 `WS_CAPTION` 并同步原生边框，
+是给「带标题栏的普通窗口」用的，做成桌面挂件会多出一条系统标题栏。所以小窗的根是一个普通的
+`QtQuick.Window`：`Qt.FramelessWindowHint | Qt.Tool`（工具窗口不占任务栏），窗口本身
+`color: "transparent"`，卡片是里面自己画的圆角矩形 + 投影。置顶不写死在 QML 里，跟着
+`settings.alwaysOnTop` 由 `main.py` 加/减 `WindowStaysOnTopHint`，两边都写会互相打架。
+
+**小窗的 import 顺序是有讲究的**
+`import QtQuick.Window` 必须排在 `import RinUI` **后面**：QML 里后导入的同名类型优先级更高，
+否则 `Window` 会解析成 RinUI 的窗口包装。副作用是 QtQuick 的 `Text` 也会盖过 RinUI 的 `Text`，
+所以 `CompactWindow.qml` 里的文字用 `font.pixelSize` / `color` 这些 Qt 原生属性，不写
+RinUI 特有的 `typography`。
+
+**两个窗口共享一个 `QQmlApplicationEngine`**
+`RinUIWindow` 用的是共享引擎，而 `ThemeManager` 是挂在 `rootContext` 上的上下文属性，
+后建的窗口会把它覆盖掉。小窗不是 RinUI 窗口（主题与背景效果都归完整窗口管），所以创建完小窗
+之后会把 `ThemeManager` 重新钉回完整窗口那一份，否则在 Windows 上切换主题 / 背景效果会失效。
+
 **为什么用 `FluentWindow` + `NavigationView`？**
 `FluentWindowBase` 的内容区 `contentArea` 是一个普通 `Item`，不是 Layout。把页面直接挂在
 窗口下并写 `Layout.fillWidth` / `Layout.fillHeight` 是**完全无效**的，页面会被算成 0×0，
@@ -310,7 +345,9 @@ python scripts/vendor_lawnicons.py --source /path/to/lawnicons/svgs
 后端只有一个上下文属性 `ConfigManager`。所有读写都是它的 `@Slot`，QML 侧调
 `ConfigManager.xxx()`；写成功后会发出 `configChanged`，页面据此重取数据，因此各个对话框
 不需要反过来通知谁刷新。少数需要落到操作系统上的设置（热键、置顶、托盘）由
-`ConfigManager` 再发一个专用信号，`main.py` 接住后应用到窗口。
+`ConfigManager` 再发一个专用信号，`main.py` 接住后应用到窗口。小窗与完整窗口之间够不到彼此，
+跨窗口的请求（打开完整窗口、隐藏、退出）走小窗自己的 `openMainRequested` /
+`hideRequested` / `quitRequested` 信号回到 `main.py`。
 
 **设置页为什么有防抖？**
 滑杆和输入框会连续产生改动，设置页先攒进 `pending`，再由 350ms 的定时器合并成一次
@@ -321,14 +358,18 @@ python scripts/vendor_lawnicons.py --source /path/to/lawnicons/svgs
 - **四个设置项目前只存不用**：`searchEngine`、`animationEnabled`、`adminAutoElevate`、
   `confirmAdminActions` 会被写进配置、界面也能改，但还没有代码消费它们。`fontFamily`、
   `fontSize`、`language` 同理（且未出现在界面上）。
-- **托盘依赖系统支持**：`QSystemTrayIcon.isSystemTrayAvailable()` 为假时不会创建托盘，
-  此时关闭窗口等于退出程序。
+- **小窗的网格是定死的 4 列**：格子边长按窗口宽度算出来（约 66px），不跟随
+  `settings.gridColumns` / `itemSize` —— 那两个只作用于完整窗口的启动台。
+- **小窗没有农历与天气**：只显示公历日期、星期和时间，不联网。
+- **托盘依赖系统支持**：`QSystemTrayIcon.isSystemTrayAvailable()` 为假时不会创建托盘。
+  完整窗口依旧可以关掉自己，但要重新叫出小窗就只能靠全局热键了。
 - **提权与开机启动仅 Windows**：`elevation.py` 走的是 `ShellExecuteExW` 与注册表。非 Windows
   平台上执行 `run_as: admin` 的条目会**直接失败**（日志里给出一条 warning），不会静默降级成
   普通启动。
 - **RinUI 自身的控制台告警**：`Dialog.qml` 里 `Overlay.overlay` 为空时的 `TypeError`、
   `Slider.qml` 的同类告警，以及 `propertyCache` 的成员覆盖提示，都是库内部行为，
-  不影响功能（本项目的对话框都显式指定了尺寸）。
+  不影响功能（本项目的对话框都显式指定了尺寸）。小窗是普通 `Window`，没有 Overlay，
+  所以那条 `Dialog.qml` 告警在小窗里必然出现，但确认框本身尺寸正常。
 
 ---
 
