@@ -11,6 +11,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 QML_ENTRY = PROJECT_ROOT / "qml" / "LauncherWindow.qml"
+COMPACT_ENTRY = PROJECT_ROOT / "qml" / "CompactWindow.qml"
 ICON_FILE = PROJECT_ROOT / "assets" / "icon.ico"
 
 # RinUI is vendored in-tree (MIT), so the package root just has to be importable.
@@ -48,14 +49,16 @@ def _setup_logging(config_manager: ConfigManager) -> None:
 
 
 class Launcher:
-    """Owns the window plus the OS-level pieces (tray, hotkey, window flags)."""
+    """Owns the windows plus the OS-level pieces (tray, hotkey, window flags)."""
 
     def __init__(self, app: QApplication):
         self.app = app
         self.config_manager = ConfigManager()
         self.config_manager.action_executor = ActionExecutor(self.config_manager)
 
+        # 两个 QML 根：常驻桌面右下角的小窗（启动台本体）和完整窗口（启动台设置 / 档案 / 设置）。
         self.window: RinUIWindow | None = None
+        self.compact: RinUIWindow | None = None
         self.tray = TrayIcon(ICON_FILE)
         self.hotkey = GlobalHotkey()
         self._tray_wired = False
@@ -82,15 +85,18 @@ class Launcher:
         if self._tray_wired:
             return
         self._tray_wired = True
-        self.tray.toggleLauncherRequested.connect(self.toggle_window)
-        self.tray.showLauncherRequested.connect(self.show_window)
-        self.tray.hideLauncherRequested.connect(self.hide_window)
-        self.tray.openPageRequested.connect(self.show_page)
+        self.tray.toggleLauncherRequested.connect(self.toggle_compact)
+        self.tray.showLauncherRequested.connect(self.show_compact)
+        self.tray.hideLauncherRequested.connect(self.hide_compact)
+        self.tray.openPageRequested.connect(self.handle_tray_page)
         self.tray.openConfigFolderRequested.connect(self.config_manager.openConfigFolder)
         self.tray.reloadConfigRequested.connect(self.config_manager.reloadConfig)
         self.tray.quitRequested.connect(self.quit)
 
-    def create_window(self) -> bool:
+    # ------------------------------------------------------------------
+    # Window creation
+    # ------------------------------------------------------------------
+    def create_main_window(self) -> bool:
         if not QML_ENTRY.is_file():
             logger.error("QML entry point is missing: %s", QML_ENTRY)
             return False
@@ -108,10 +114,37 @@ class Launcher:
         if ICON_FILE.is_file():
             window.setIcon(ICON_FILE)
 
-        # QML 的关闭按钮只发信号，由这里决定是收进托盘还是真的退出。
+        # QML 的关闭按钮只发信号，由这里决定是收起还是真的退出。
         root = window.root_window
         if hasattr(root, "closeRequested"):
             root.closeRequested.connect(self.on_close_requested)
+        return True
+
+    def create_compact_window(self) -> bool:
+        if not COMPACT_ENTRY.is_file():
+            logger.error("Compact QML entry point is missing: %s", COMPACT_ENTRY)
+            return False
+
+        window = RinUIWindow()
+        window.engine.rootContext().setContextProperty("ConfigManager", self.config_manager)
+        window.load(COMPACT_ENTRY)
+
+        if window.root_window is None:
+            logger.error("Failed to load %s", COMPACT_ENTRY)
+            return False
+
+        self.compact = window
+        root = window.root_window
+        # 小窗是独立的 QML 根，够不到主窗口，跨窗口的请求统一走信号回到这里。
+        root.openMainRequested.connect(self.show_main_page)
+        root.hideRequested.connect(self.hide_compact)
+        root.quitRequested.connect(self.quit)
+
+        # ThemeManager 挂在共享的 rootContext 上，后建的窗口会把它顶掉。小窗不是
+        # RinUI 窗口，主题与背景效果都归主窗口管，所以在这里把它钉回主窗口那一份。
+        if self.window is not None:
+            self.window.engine.rootContext().setContextProperty(
+                "ThemeManager", self.window.theme_manager)
 
         self.apply_always_on_top(
             bool(self.config_manager.config["settings"].get("alwaysOnTop", True)))
@@ -125,9 +158,10 @@ class Launcher:
             logger.info("No global hotkey registered (configured value: %r)", sequence)
 
     def apply_always_on_top(self, enabled: bool) -> None:
-        if self.window is None or self.window.root_window is None:
+        """常驻小窗跟着 settings.alwaysOnTop 走；主窗口保持普通窗口行为。"""
+        if self.compact is None or self.compact.root_window is None:
             return
-        root = self.window.root_window
+        root = self.compact.root_window
         flags = root.flags()
         flags = flags | Qt.WindowStaysOnTopHint if enabled else flags & ~Qt.WindowStaysOnTopHint
         if flags == root.flags():
@@ -147,36 +181,58 @@ class Launcher:
     # ------------------------------------------------------------------
     # Window operations (also invoked from the tray)
     # ------------------------------------------------------------------
-    def show_window(self) -> None:
+    @staticmethod
+    def _visible(window: RinUIWindow | None) -> bool:
+        return (
+            window is not None
+            and window.root_window is not None
+            and window.root_window.isVisible()
+        )
+
+    def show_compact(self) -> None:
+        if self.compact is None or self.compact.root_window is None:
+            return
+        root = self.compact.root_window
+        root.show()
+        root.raise_()
+        root.requestActivate()
+
+    def hide_compact(self) -> None:
+        if self.compact is not None and self.compact.root_window is not None:
+            self.compact.root_window.hide()
+
+    def toggle_compact(self) -> None:
+        if self._visible(self.compact):
+            self.hide_compact()
+        else:
+            self.show_compact()
+
+    def show_main_page(self, page: str) -> None:
+        """打开完整窗口并切到指定页（小窗的「打开完整窗口」也走这里）。"""
         if self.window is None or self.window.root_window is None:
             return
         root = self.window.root_window
         root.show()
         root.raise_()
         root.requestActivate()
+        root.setProperty("requestedPage", page)
 
-    def hide_window(self) -> None:
+    def hide_main(self) -> None:
         if self.window is not None and self.window.root_window is not None:
             self.window.root_window.hide()
 
-    def toggle_window(self) -> None:
-        if self.window is None or self.window.root_window is None:
-            return
-        if self.window.root_window.isVisible():
-            self.hide_window()
+    def handle_tray_page(self, page: str) -> None:
+        """托盘菜单里的「启动台」现在指常驻小窗，档案 / 设置才开完整窗口。"""
+        if page == "launcher":
+            self.show_compact()
         else:
-            self.show_window()
-
-    def show_page(self, page: str) -> None:
-        self.show_window()
-        if self.window is not None and self.window.root_window is not None:
-            self.window.root_window.setProperty("requestedPage", page)
+            self.show_main_page(page)
 
     def on_close_requested(self) -> None:
-        """The window's close button: hide when the tray can bring it back."""
-        if self.tray.started:
-            self.hide_window()
-        else:
+        """完整窗口的关闭按钮只收起自己 —— 常驻小窗还在，程序不该跟着退出。"""
+        self.hide_main()
+        if not self.tray.started and not self._visible(self.compact):
+            # 没有托盘、小窗也没显示：再没有任何入口能把它叫回来了。
             self.quit()
 
     def quit(self) -> None:
@@ -188,7 +244,7 @@ class Launcher:
     def run(self) -> int:
         self.config_manager.startWatching()
         if not self.config_manager.config["settings"].get("startMinimized", False):
-            self.show_window()
+            self.show_compact()
 
         try:
             return self.app.exec()
@@ -206,10 +262,12 @@ def main() -> int:
     launcher = Launcher(app)
     _setup_logging(launcher.config_manager)
 
-    if not launcher.create_window():
+    if not launcher.create_main_window():
+        return 1
+    if not launcher.create_compact_window():
         return 1
 
-    launcher.hotkey.activated.connect(launcher.toggle_window)
+    launcher.hotkey.activated.connect(launcher.toggle_compact)
     return launcher.run()
 
 

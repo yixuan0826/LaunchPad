@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import sys
 import time
 import uuid
 from collections.abc import Callable
@@ -30,6 +31,60 @@ DEFAULT_CONFIG_DIR = Path.home() / "AppData" / "Roaming" / "RinLauncher"
 FALLBACK_CATEGORY = "默认"
 ICON_DIR = Path(__file__).resolve().parent.parent / "assets" / "icons" / "lawnicons"
 
+# 常驻小窗是三行固定槽位：第一行 4 个常用应用、第二行 6 个快捷功能、第三行 1 个存储位置。
+APP_SLOTS = 4
+TOOL_SLOTS = 6
+
+# 第二行能选的内置功能。(key, 标题, Fluent 图标名)
+TOOL_CATALOG: tuple = (
+    ("configFolder", "配置目录", "ic_fluent_folder_open_20_regular"),
+    ("reload", "重载配置", "ic_fluent_arrow_sync_20_regular"),
+    ("records", "档案管理", "ic_fluent_book_20_regular"),
+    ("settings", "设置", "ic_fluent_settings_20_regular"),
+    ("main", "完整窗口", "ic_fluent_window_20_regular"),
+    ("elevate", "提权重启", "ic_fluent_shield_20_regular"),
+    ("usb", "U 盘", "ic_fluent_hard_drive_20_regular"),
+    ("hide", "隐藏小窗", "ic_fluent_eye_off_20_regular"),
+)
+DEFAULT_TOOL_KEYS: tuple = ("configFolder", "reload", "records",
+                            "settings", "main", "elevate")
+TOOL_ICONS: dict[str, str] = {key: icon for key, _title, icon in TOOL_CATALOG}
+TOOL_TITLES: dict[str, str] = {key: title for key, title, _icon in TOOL_CATALOG}
+
+
+def _human_size(size: int) -> str:
+    """把字节数写成 32.78GB 这种一眼能读的形式。"""
+    value = float(size)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if value < 1024 or unit == "TB":
+            return f"{value:.0f}{unit}" if unit == "B" else f"{value:.2f}{unit}"
+        value /= 1024
+    return f"{value:.2f}TB"
+
+
+def _find_removable_drive() -> str:
+    """返回第一个可移动磁盘的根路径（如 ``E:\\``）；找不到或非 Windows 返回空串。"""
+    if sys.platform != "win32":
+        return ""
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        mask = kernel32.GetLogicalDrives()
+    except Exception:
+        logger.exception("Failed to enumerate drives")
+        return ""
+
+    for index in range(26):
+        if not mask & (1 << index):
+            continue
+        root = f"{chr(ord('A') + index)}:\\"
+        # DRIVE_REMOVABLE == 2
+        if kernel32.GetDriveTypeW(ctypes.c_wchar_p(root)) == 2:
+            return root
+    return ""
+
+
 DEFAULT_SETTINGS: dict[str, Any] = {
     "theme": "system",
     "language": "zh_CN",
@@ -38,6 +93,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "autoStart": False,
     "alwaysOnTop": True,
     "globalHotkey": "Ctrl+Space",
+    # 常驻小窗的位置，写成 "x,y"；空串表示还没拖过，按右下角摆放。
+    "compactPos": "",
     "searchEngine": "https://www.bing.com/search?q={query}",
     "gridColumns": 8,
     "itemSize": 96,
@@ -110,6 +167,12 @@ def _default_config() -> dict[str, Any]:
         "version": 1,
         "actions": actions,
         "categories": categories,
+        "launcher": {
+            # 默认拿前 4 个条目填常用应用槽位，其余槽位留空。
+            "apps": [action["id"] for action in actions[:APP_SLOTS]],
+            "tools": list(DEFAULT_TOOL_KEYS),
+            "storagePath": "",
+        },
         "settings": dict(DEFAULT_SETTINGS),
     }
 
@@ -150,7 +213,6 @@ class ConfigManager(QObject):
         self.action_executor = None
         self._observer: Observer | None = None
         self._quiet_until = 0.0  # ignores the watcher echo of our own writes
-        self._categorized: list[dict] | None = None
         self._config = self._load()
 
     @property
@@ -178,7 +240,30 @@ class ConfigManager(QObject):
         data.setdefault("categories", [])
         # settings keys added by newer builds get their default value
         data["settings"] = {**DEFAULT_SETTINGS, **(data.get("settings") or {})}
+        data["launcher"] = self._normalize_launcher(data)
         return data
+
+    def _normalize_launcher(self, data: dict[str, Any]) -> dict[str, Any]:
+        """把 launcher 段补成固定槽位：4 个应用 + 6 个快捷功能 + 1 个存储位置。"""
+        raw = data.get("launcher") or {}
+        apps = [str(item or "") for item in (raw.get("apps") or [])]
+        if not any(apps):
+            # 老配置升级上来时 launcher 段还不存在，拿前几个条目补满第一行。
+            apps = [a["id"] for a in data.get("actions", []) if a.get("enabled", True)]
+
+        tools = [str(item or "") for item in (raw.get("tools") or [])]
+        if not any(tools):
+            tools = list(DEFAULT_TOOL_KEYS)
+
+        # 只留仍然存在的 key，免得配置被外部改坏后界面上出现点不动的按钮。
+        known = set(TOOL_ICONS)
+        tools = [key if key in known else "" for key in tools]
+
+        return {
+            "apps": (apps + [""] * APP_SLOTS)[:APP_SLOTS],
+            "tools": (tools + [""] * TOOL_SLOTS)[:TOOL_SLOTS],
+            "storagePath": str(raw.get("storagePath") or ""),
+        }
 
     def save(self, config: dict[str, Any] | None = None) -> bool:
         if config is not None:
@@ -193,7 +278,6 @@ class ConfigManager(QObject):
             logger.exception("Failed to write %s", self.config_file)
             return False
 
-        self._categorized = None
         self.configChanged.emit()
         return True
 
@@ -248,61 +332,103 @@ class ConfigManager(QObject):
                 return index
         return 0
 
+    @Slot(result="QVariantMap")
+    def getLauncherConfig(self) -> dict[str, Any]:
+        """常驻小窗的原始配置：4 个应用槽位 + 6 个功能槽位 + 存储位置。"""
+        return dict(self._config["launcher"])
+
+    @Slot("QVariantMap", result=bool)
+    def updateLauncherConfig(self, payload: dict) -> bool:
+        launcher = self._config["launcher"]
+        for key in ("apps", "tools", "storagePath"):
+            if key not in payload:
+                continue
+            value = payload[key]
+            launcher[key] = str(value or "") if key == "storagePath" else list(value or [])
+        # 槽位数固定，多出来的截掉、少的补空，免得界面按 index 取不到东西。
+        launcher["apps"] = (list(launcher["apps"]) + [""] * APP_SLOTS)[:APP_SLOTS]
+        launcher["tools"] = (list(launcher["tools"]) + [""] * TOOL_SLOTS)[:TOOL_SLOTS]
+        return self.save()
+
     @Slot(result="QVariantList")
-    def getCategorizedActions(self) -> list[dict]:
-        if self._categorized is None:
-            enabled = [a for a in self._config["actions"] if a.get("enabled", True)]
-            self._categorized = self._group_by_category(enabled)
-        return self._categorized
+    def getLauncherApps(self) -> list[dict]:
+        """第一行：固定 4 格，已经删掉的条目会退化成空位。"""
+        by_id = {action["id"]: action for action in self._config["actions"]}
+        slots = []
+        for action_id in self._config["launcher"]["apps"]:
+            action = by_id.get(action_id)
+            slots.append(dict(action) if action and action.get("enabled", True) else {})
+        return slots
 
-    @Slot(str, result="QVariantList")
-    def searchActions(self, query: str) -> list[dict]:
-        """Search results use the same grouped shape as getCategorizedActions()."""
-        needle = query.strip().lower()
-        if not needle:
-            return self.getCategorizedActions()
-        matches = [
-            action for action in self._config["actions"]
-            if action.get("enabled", True)
-            and (needle in action.get("name", "").lower()
-                 or needle in action.get("tooltip", "").lower())
-        ]
-        # No empty fallback bucket among search results.
-        return self._group_by_category(matches, keep_empty_fallback=False)
+    @Slot(result="QVariantList")
+    def getToolCatalog(self) -> list[dict]:
+        """第二行可选的全部内置功能，给设置页做下拉。"""
+        return [{"key": key, "title": title, "icon": icon}
+                for key, title, icon in TOOL_CATALOG]
 
-    def _group_by_category(self, actions: list[dict], keep_empty_fallback: bool = True) -> list[dict]:
-        buckets: dict[str, list[dict]] = {}
-        for action in actions:
-            buckets.setdefault(action.get("category", FALLBACK_CATEGORY), []).append(action)
-
-        sections = []
-        known = set()
-        for category in sorted(self._config["categories"], key=lambda c: c.get("order", 0)):
-            name = category["name"]
-            known.add(name)
-            if name in buckets or (keep_empty_fallback and name == FALLBACK_CATEGORY):
-                sections.append({
-                    "categoryName": name,
-                    "categoryIcon": category.get("icon", "ic_fluent_folder_20_regular"),
-                    "actions": sorted(buckets.get(name, []), key=lambda a: a.get("order", 0)),
-                })
-
-        # An entry whose category was deleted or renamed by hand must still be
-        # reachable, otherwise it silently vanishes from the launcher.
-        orphans = [action for name, items in buckets.items() if name not in known for action in items]
-        if orphans:
-            orphans.sort(key=lambda action: action.get("order", 0))
-            fallback = next((s for s in sections if s["categoryName"] == FALLBACK_CATEGORY), None)
-            if fallback is None:
-                sections.append({
-                    "categoryName": FALLBACK_CATEGORY,
-                    "categoryIcon": "ic_fluent_folder_20_regular",
-                    "actions": orphans,
-                })
+    @Slot(result="QVariantList")
+    def getLauncherTools(self) -> list[dict]:
+        """第二行：固定 6 格，空 key 表示这一格没配。"""
+        slots = []
+        for key in self._config["launcher"]["tools"]:
+            if key in TOOL_ICONS:
+                slots.append({"key": key, "title": TOOL_TITLES[key], "icon": TOOL_ICONS[key]})
             else:
-                fallback["actions"] = sorted(fallback["actions"] + orphans,
-                                             key=lambda action: action.get("order", 0))
-        return sections
+                slots.append({})
+        return slots
+
+    @Slot(result="QVariantMap")
+    def getStorageInfo(self) -> dict[str, Any]:
+        """第三行：存储位置与容量，外加第一个可移动磁盘的路径。"""
+        path = self._storagePath()
+        info: dict[str, Any] = {
+            "path": str(path),
+            "label": path.name or str(path),
+            "free": "",
+            "total": "",
+            "percent": 0,
+            "available": False,
+            "drive": _find_removable_drive(),
+        }
+        try:
+            usage = shutil.disk_usage(path)
+        except OSError:
+            logger.warning("Cannot read disk usage of %s", path)
+            return info
+
+        info["available"] = True
+        info["free"] = _human_size(usage.free)
+        info["total"] = _human_size(usage.total)
+        info["percent"] = round(usage.used / usage.total * 100) if usage.total else 0
+        return info
+
+    def _storagePath(self) -> Path:
+        raw = str(self._config["launcher"].get("storagePath") or "").strip()
+        candidate = Path(raw).expanduser() if raw else Path.home()
+        # 配置里写了个已经不存在的路径时退回主目录，别让小窗显示一片空白。
+        return candidate if candidate.exists() else Path.home()
+
+    @Slot(result=str)
+    def pickFolder(self) -> str:
+        path = QFileDialog.getExistingDirectory(None, "选择存储位置", str(Path.home()))
+        return path or ""
+
+    @Slot(str)
+    def openPath(self, path: str) -> None:
+        target = Path(path).expanduser()
+        if not target.exists():
+            self.showToast.emit(f"路径不存在：{target}", "warning")
+            return
+        self._reveal(target)
+
+    @Slot(result=bool)
+    def openRemovableDrive(self) -> bool:
+        drive = _find_removable_drive()
+        if not drive:
+            self.showToast.emit("没有检测到可移动磁盘", "warning")
+            return False
+        self._reveal(Path(drive))
+        return True
 
     # ------------------------------------------------------------------
     # Write API (called from QML)
@@ -453,7 +579,6 @@ class ConfigManager(QObject):
     def reloadConfig(self) -> bool:
         """Re-read config.yaml from disk and tell the UI about it."""
         self._config = self._load()
-        self._categorized = None
         self.configChanged.emit()
         return True
 
@@ -544,5 +669,4 @@ class ConfigManager(QObject):
             return
         logger.info("Config changed on disk, reloading")
         self._config = self._load()
-        self._categorized = None
         self.configChanged.emit()
