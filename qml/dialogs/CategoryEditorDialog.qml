@@ -9,7 +9,7 @@ import "../components"
 //
 // 分区在配置里以「名字」被条目引用，因此重命名会级联更新条目 —— 这一步由
 // ConfigManager.updateCategory() 在写入时完成，这里只负责校验与提交。
-Dialog {
+AppDialog {
     id: editor
 
     property var category: null       // null 表示新建
@@ -20,7 +20,7 @@ Dialog {
 
     title: isNew ? qsTr("新建分区") : qsTr("编辑分区")
     modal: true
-    width: 560
+    preferredWidth: 560
     closePolicy: Popup.NoAutoClose
 
     IconPickerDialog {
@@ -58,6 +58,7 @@ Dialog {
             }
             Text {
                 Layout.fillWidth: true
+                wrapMode: Text.NoWrap
                 elide: Text.ElideMiddle
                 font.family: "Consolas"
                 color: Theme.currentTheme.colors.textSecondaryColor

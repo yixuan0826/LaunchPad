@@ -9,7 +9,7 @@ import RinUI
 // 运行期重新解析一遍 QML，并且泄漏一个对象。用法：
 //
 //     confirmDialog.ask("确定要删除吗？", function() { ... })
-Dialog {
+AppDialog {
     id: confirmDialog
 
     property string message: ""
@@ -19,7 +19,7 @@ Dialog {
 
     title: qsTr("确认")
     modal: true
-    width: 420
+    preferredWidth: 420
     closePolicy: Popup.NoAutoClose
 
     function ask(text, action, options) {

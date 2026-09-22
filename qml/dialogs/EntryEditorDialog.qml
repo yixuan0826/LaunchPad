@@ -9,7 +9,7 @@ import "../components"
 //
 // 类型决定目标字段的含义；键鼠类型会额外启用「键鼠序列」分页。只有点「保存」
 // 才写回配置，取消则原样丢弃临时状态。
-Dialog {
+AppDialog {
     id: editor
 
     readonly property var entryTypes: ["file", "cmd", "url", "keymouse"]
@@ -27,8 +27,8 @@ Dialog {
 
     title: isNew ? qsTr("新建条目") : qsTr("编辑条目")
     modal: true
-    width: 720
-    height: 620
+    preferredWidth: 720
+    preferredHeight: 620
     closePolicy: Popup.NoAutoClose
 
     IconPickerDialog {
@@ -95,6 +95,7 @@ Dialog {
                         }
                         Text {
                             Layout.fillWidth: true
+                            wrapMode: Text.NoWrap
                             elide: Text.ElideMiddle
                             font.family: "Consolas"
                             color: Theme.currentTheme.colors.textSecondaryColor

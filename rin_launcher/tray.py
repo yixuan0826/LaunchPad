@@ -74,13 +74,17 @@ class TrayIcon(QObject):
     def _build_menu(self, title: str) -> QMenu:
         menu = QMenu()
 
-        toggle = QAction(f"显示 / 隐藏 {title}", menu)
-        toggle.triggered.connect(self.toggleLauncherRequested.emit)
-        menu.addAction(toggle)
+        show = QAction(f"显示 {title}", menu)
+        show.triggered.connect(self.showLauncherRequested.emit)
+        menu.addAction(show)
+
+        hide = QAction("隐藏", menu)
+        hide.triggered.connect(self.hideLauncherRequested.emit)
+        menu.addAction(hide)
 
         menu.addSeparator()
 
-        launcher = QAction("启动台", menu)
+        launcher = QAction("启动台设置", menu)
         launcher.triggered.connect(lambda: self.openPageRequested.emit("launcher"))
         menu.addAction(launcher)
 
@@ -91,6 +95,10 @@ class TrayIcon(QObject):
         settings = QAction("设置", menu)
         settings.triggered.connect(lambda: self.openPageRequested.emit("settings"))
         menu.addAction(settings)
+
+        about = QAction("关于", menu)
+        about.triggered.connect(lambda: self.openPageRequested.emit("about"))
+        menu.addAction(about)
 
         menu.addSeparator()
 
