@@ -22,13 +22,24 @@ import RinUI  # noqa: F401  (imported first: it configures HiDPI before Qt start
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 from RinUI import RinUIWindow  # noqa: E402
+from RinUI.core import BackdropEffect, is_windows  # noqa: E402
 
+from rin_launcher import effects  # noqa: E402
 from rin_launcher.action_executor import ActionExecutor  # noqa: E402
 from rin_launcher.config_manager import ConfigManager  # noqa: E402
 from rin_launcher.hotkey import GlobalHotkey  # noqa: E402
 from rin_launcher.tray import TrayIcon  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+# 完整窗口的材质。小窗走亚克力（见 effects.py），不在这里选。
+MATERIALS: dict[str, BackdropEffect] = {
+    "tabbed": BackdropEffect.Tabbed,   # 增强云母
+    "mica": BackdropEffect.Mica,       # 云母
+    "none": BackdropEffect.None_,
+}
+DEFAULT_MATERIAL = "tabbed"
+
 
 
 def _setup_logging(config_manager: ConfigManager) -> None:
@@ -62,6 +73,8 @@ class Launcher:
         self.tray = TrayIcon(ICON_FILE)
         self.hotkey = GlobalHotkey()
         self._tray_wired = False
+        # 已经上过的小窗材质参数，避免每次设置改动都重上一次。
+        self._acrylic_state: tuple[bool, bool] | None = None
 
         self._wire_config()
 
@@ -74,6 +87,11 @@ class Launcher:
         self.config_manager.hotkeyChanged.connect(self.apply_hotkey)
         self.config_manager.alwaysOnTopChanged.connect(self.apply_always_on_top)
         self.config_manager.trayEnabledChanged.connect(self.apply_tray)
+        self.config_manager.materialChanged.connect(self.apply_material)
+        self.config_manager.settingsChanged.connect(self.apply_compact_acrylic)
+        # QML 里的页面够不到窗口对象，页面级请求统一从后端转上来。
+        self.config_manager.pageRequested.connect(self.show_main_page)
+        self.config_manager.previewCompactRequested.connect(self.show_compact)
         self.config_manager.showToast.connect(
             lambda message, _severity: self.tray.show_message("Rin Launcher", message))
 
@@ -113,6 +131,8 @@ class Launcher:
         self.window = window
         if ICON_FILE.is_file():
             window.setIcon(ICON_FILE)
+        self.apply_material(str(self.config_manager.config["settings"].get(
+            "material", DEFAULT_MATERIAL)))
 
         # QML 的关闭按钮只发信号，由这里决定是收起还是真的退出。
         root = window.root_window
@@ -148,6 +168,9 @@ class Launcher:
 
         self.apply_always_on_top(
             bool(self.config_manager.config["settings"].get("alwaysOnTop", True)))
+        # 桌面挂件：不抢焦点 + 亚克力。材质要在窗口有原生句柄之后再上。
+        effects.apply_no_focus_tool_window(root)
+        self.apply_compact_acrylic()
         return True
 
     # ------------------------------------------------------------------
@@ -156,6 +179,55 @@ class Launcher:
     def apply_hotkey(self, sequence: str) -> None:
         if not self.hotkey.register(sequence):
             logger.info("No global hotkey registered (configured value: %r)", sequence)
+
+    def apply_material(self, material: str) -> None:
+        """完整窗口的材质：默认「增强云母」。
+
+        RinUI 的 backdrop 只管它自己注册过的窗口，小窗另有亚克力（见
+        ``apply_compact_acrylic``）。非 Windows 上 RinUI 会直接抛错，所以先判断平台。
+        """
+        if self.window is None or not is_windows():
+            return
+        effect = MATERIALS.get(str(material), MATERIALS[DEFAULT_MATERIAL])
+        try:
+            self.window.setBackdropEffect(effect)
+        except Exception:
+            logger.exception("Failed to apply backdrop effect %r", material)
+
+    def apply_compact_acrylic(self) -> None:
+        """小窗的亚克力。QML 侧会根据 ``acrylicActive`` 决定卡片画多透明。"""
+        if self.compact is None or self.compact.root_window is None:
+            return
+        root = self.compact.root_window
+        enabled = bool(self.config_manager.config["settings"].get("compactAcrylic", True))
+        dark = self._is_dark_theme()
+
+        # 设置改动会频繁触发这里，参数没变就别重复问系统了。
+        signature = (enabled, dark)
+        if signature == self._acrylic_state:
+            return
+        self._acrylic_state = signature
+
+        if not enabled:
+            effects.clear_acrylic(root)
+            root.setProperty("acrylicActive", False)
+            return
+
+        applied = effects.apply_acrylic(root, dark=dark)
+        root.setProperty("acrylicActive", applied)
+        if not applied:
+            logger.info("Acrylic unavailable, falling back to a translucent card")
+
+    def _is_dark_theme(self) -> bool:
+        mode = str(self.config_manager.config["settings"].get("theme", "system")).lower()
+        if mode == "dark":
+            return True
+        if mode == "light":
+            return False
+        try:  # 跟随系统
+            return bool(self.app.styleHints().colorScheme().name == "Dark")
+        except Exception:
+            return False
 
     def apply_always_on_top(self, enabled: bool) -> None:
         """常驻小窗跟着 settings.alwaysOnTop 走；主窗口保持普通窗口行为。"""
@@ -170,6 +242,9 @@ class Launcher:
         root.setFlags(flags)
         if was_visible:  # changing flags hides the window on some platforms
             root.show()
+        # setFlags 会重建原生窗口，之前挂上去的扩展样式和材质都得重来一遍。
+        effects.apply_no_focus_tool_window(root)
+        self.apply_compact_acrylic()
 
     def apply_tray(self, enabled: bool) -> None:
         if enabled:
@@ -194,8 +269,9 @@ class Launcher:
             return
         root = self.compact.root_window
         root.show()
+        # 小窗带 WindowDoesNotAcceptFocus，requestActivate() 是无效调用（Qt 会打一条
+        # 警告），置顶靠 WindowStaysOnTopHint，不需要抢前台。
         root.raise_()
-        root.requestActivate()
 
     def hide_compact(self) -> None:
         if self.compact is not None and self.compact.root_window is not None:

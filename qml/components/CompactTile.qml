@@ -2,26 +2,31 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import RinUI
 
-// 常驻小窗第一行里的一格：图标在上、单行标题在下。
+// 小窗里的一格：图标在上、单行标题在下。
 //
-// 没有复用 EntryTile：那个是给完整窗口 96~144px 方块用的，字号写死在 12px，
-// 缩到小窗的 92px 会把两行标题挤成一团。
+// 被 CompactRow 用来画前两行 —— 大格子放应用，小格子放功能。两种形态只是尺寸
+// 不同，所以用 style 切换而不是拆成两个组件。
 Item {
     id: tile
 
-    property var entry: null
-    property real tileSize: 66
+    property var slot: null
+    property string style: "big"        // big = 应用大格，mini = 功能小格
 
-    signal activated(var entry)
-    signal menuRequested(var entry, real sceneX, real sceneY)
+    signal activated(var slot)
+    signal menuRequested(var slot, real sceneX, real sceneY)
 
-    // 槽位固定 4 个，还没配的那格也要占着位置。
-    readonly property bool empty: !entry || !entry.id
-    readonly property bool entryDisabled: entry ? entry.enabled === false : false
+    readonly property bool mini: style === "mini"
+    readonly property bool empty: !slot
+    // 引用了被停用的条目时，Python 那边就不会把这一格解析出来，所以这里只兜底。
+    readonly property bool disabled: slot ? slot.enabled === false : false
+    readonly property real iconSize: mini ? 22 : Math.round(width * 0.36)
+    // 小格子只有 50px 上下，字号得再收一点，否则「启动台设置」这种五字标题
+    // 会折成 4+1 两行，第二行孤零零一个字很难看。
+    readonly property int labelSize: mini ? 9 : 11
 
-    width: tileSize
-    height: tileSize
-    opacity: empty ? 0.28 : (entryDisabled ? 0.45 : 1)
+    width: mini ? 56 : 76
+    height: mini ? 58 : width
+    opacity: empty ? 0.3 : disabled ? 0.45 : 1
 
     Rectangle {
         anchors.fill: parent
@@ -41,14 +46,15 @@ Item {
 
     Column {
         anchors.centerIn: parent
-        width: parent.width - 8
-        spacing: 4
+        width: parent.width - 6
+        spacing: tile.mini ? 3 : 5
 
         AppIcon {
             anchors.horizontalCenter: parent.horizontalCenter
-            iconKey: tile.empty ? "ic_fluent_add_20_regular" : tile.entry.icon
-            iconSize: Math.round(tile.tileSize * 0.34)
-            tint: tile.empty || tile.entryDisabled
+            iconKey: tile.slot ? tile.slot.icon : ""
+            iconSize: tile.iconSize
+            placeholder: "ic_fluent_add_20_regular"
+            tint: tile.empty || tile.disabled
                 ? Theme.currentTheme.colors.textSecondaryColor
                 : Theme.currentTheme.colors.primaryColor
         }
@@ -56,12 +62,27 @@ Item {
         Text {
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
+            // 每格只有 50~76px，标题四五个字就装不下，允许折成两行，
+            // 免得变成「打开配置…」这种读不出意思的省略号。
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             elide: Text.ElideRight
-            maximumLineCount: 1
-            font.pixelSize: 10
+            lineHeight: 0.95
+            font.pixelSize: tile.labelSize
             color: Theme.currentTheme.colors.textColor
-            text: tile.empty ? qsTr("未设置") : tile.entry.name
+            text: tile.slot ? tile.slot.name : ""
         }
+    }
+
+    // 提权条目给个小盾牌角标，和完整窗口里的语义对齐。
+    AppIcon {
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: 2
+        visible: !!tile.slot && tile.slot.admin === true
+        iconKey: "ic_fluent_shield_20_regular"
+        iconSize: 11
+        tint: Theme.currentTheme.colors.primaryColor
     }
 
     MouseArea {
@@ -71,15 +92,15 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onReleased: {
-            if (mouse.button === Qt.LeftButton && containsMouse) {
-                tile.activated(tile.entry)
+            if (mouse.button === Qt.LeftButton && containsMouse && !tile.empty) {
+                tile.activated(tile.slot)
             }
         }
         onClicked: {
             if (mouse.button === Qt.RightButton) {
                 // 映射到场景坐标，菜单才能在任何父级里正确定位。
                 var scene = tile.mapToItem(null, mouseX, mouseY)
-                tile.menuRequested(tile.entry, scene.x, scene.y)
+                tile.menuRequested(tile.slot, scene.x, scene.y)
             }
         }
     }

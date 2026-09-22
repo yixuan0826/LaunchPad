@@ -1,28 +1,38 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 2.15
-import QtQuick.Controls 2.15 as QQC2
 import RinUI
 
 import "../components"
 
-// Icon chooser for entries and categories.
+// 图标选择器。
 //
-// Tab 1 lists RinUI's Fluent glyphs (only names that exist in the bundled icon
-// index are listed — an unknown name renders as blank).  Tab 2 lists the
-// Lawnicons marks shipped under assets/icons/lawnicons.
-QQC2.Dialog {
+// 四个来源分页：内置图标（RinUI 的 Fluent 字体）、随包图标（Lawnicons SVG）、
+// 我的图标（导入的 svg / png / ico，以及从程序里抽出来的），还有「从程序提取」。
+//
+// 两处和上一版不同的取舍：
+//   * 页签用 Segmented —— 自带选中态的填充与下划线，比裸 TabBar 一眼看得出；
+//   * 点一下不再直接关窗，先选中、再按「使用这个图标」，免得手一抖就选错。
+AppDialog {
     id: picker
 
     property string current: ""
+    property string pendingKey: ""
 
     signal picked(string iconKey)
 
+    readonly property int cellSize: 56
+
     title: qsTr("选择图标")
-    modal: true
-    standardButtons: QQC2.Dialog.Cancel
-    width: 640
-    height: 560
+    preferredWidth: 780
+    preferredHeight: 620
+    closeOnScrim: false
+
+    // ── 数据 ──
+    property var bundledIcons: []
+    property var customIcons: []
+    property string extractPath: ""
+    property string extractPreview: ""
 
     readonly property var fluentIcons: [
         "ic_fluent_home_20_regular", "ic_fluent_apps_20_regular", "ic_fluent_apps_list_20_regular",
@@ -63,50 +73,292 @@ QQC2.Dialog {
         "ic_fluent_arrow_reset_20_regular", "ic_fluent_reorder_20_regular",
         "ic_fluent_more_horizontal_20_regular", "ic_fluent_more_vertical_20_regular",
         "ic_fluent_arrow_up_20_regular", "ic_fluent_arrow_down_20_regular",
-        "ic_fluent_arrow_left_20_regular", "ic_fluent_arrow_right_20_regular"
+        "ic_fluent_arrow_left_20_regular", "ic_fluent_arrow_right_20_regular",
+        "ic_fluent_hard_drive_20_regular", "ic_fluent_usb_plug_20_regular",
+        "ic_fluent_wifi_1_20_regular", "ic_fluent_bluetooth_20_regular",
+        "ic_fluent_mail_20_regular", "ic_fluent_chat_20_regular", "ic_fluent_call_20_regular",
+        "ic_fluent_calendar_20_regular", "ic_fluent_cloud_20_regular", "ic_fluent_weather_sunny_20_regular",
+        "ic_fluent_bug_20_regular", "ic_fluent_task_list_20_regular", "ic_fluent_gift_20_regular"
     ]
 
-    property var bundledIcons: []
-
-    readonly property var activeIcons: tabs.currentIndex === 0 ? fluentIcons : bundledIcons
-
     onAboutToShow: {
+        pendingKey = current
+        extractPreview = ""
+        extractPath = ""
         bundledIcons = ConfigManager.getBundledIcons().map(
             function (name) { return "lawnicons:" + name })
-        tabs.currentIndex = current.indexOf("lawnicons:") === 0 && bundledIcons.length > 0 ? 1 : 0
+        reloadCustom()
+        // 已经是用户自己的图标，就直接落在「我的图标」页。
+        tabs.currentIndex = current.indexOf("file:") === 0 ? 2
+            : current.indexOf("lawnicons:") === 0 ? 1 : 0
     }
 
-    TabBar {
-        id: tabs
-        width: parent.width
-        TabButton { text: qsTr("Fluent 图标") }
-        TabButton { text: qsTr("Lawnicons") }
+    function reloadCustom() {
+        customIcons = ConfigManager.getCustomIcons()
     }
 
-    GridView {
-        anchors.top: tabs.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        clip: true
-        cellWidth: 52
-        cellHeight: 52
-        model: picker.activeIcons
+    // ------------------------------------------------------------------
+    // 内容
+    // ------------------------------------------------------------------
+    ColumnLayout {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        spacing: 12
 
-        delegate: ToolButton {
-            width: 52
-            height: 52
-            checkable: true
-            checked: picker.current === modelData
-            onClicked: {
-                picker.picked(modelData)
-                picker.close()
+        Segmented {
+            id: tabs
+            objectName: "iconTabs"
+            Layout.alignment: Qt.AlignLeft
+            SegmentedItem { text: qsTr("内置图标") }
+            SegmentedItem { text: qsTr("随包图标") }
+            SegmentedItem { text: qsTr("我的图标") }
+            SegmentedItem { text: qsTr("从程序提取") }
+        }
+
+        StackLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            currentIndex: tabs.currentIndex
+
+            // ── 0：内置 Fluent 图标 ──
+            ColumnLayout {
+                spacing: 8
+
+                Text {
+                    Layout.fillWidth: true
+                    typography: Typography.Caption
+                    color: Theme.currentTheme.colors.textSecondaryColor
+                    text: qsTr("RinUI 自带的 Fluent 字体图标，共 %1 个。")
+                        .arg(picker.fluentIcons.length)
+                }
+
+                IconGrid {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    icons: picker.fluentIcons
+                    cellSize: picker.cellSize
+                    selectedKey: picker.pendingKey
+                    onPicked: picker.pendingKey = iconKey
+                }
             }
 
-            AppIcon {
-                anchors.centerIn: parent
-                iconKey: modelData
-                iconSize: 24
+            // ── 1：随包 Lawnicons ──
+            ColumnLayout {
+                spacing: 8
+
+                Text {
+                    Layout.fillWidth: true
+                    typography: Typography.Caption
+                    color: Theme.currentTheme.colors.textSecondaryColor
+                    text: qsTr("随程序附带的 %1 个通用图标，会跟着主题色变化。")
+                        .arg(picker.bundledIcons.length)
+                }
+
+                IconGrid {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    icons: picker.bundledIcons
+                    cellSize: picker.cellSize
+                    selectedKey: picker.pendingKey
+                    onPicked: picker.pendingKey = iconKey
+                }
+            }
+
+            // ── 2：我的图标 ──
+            ColumnLayout {
+                spacing: 8
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Text {
+                        Layout.fillWidth: true
+                        typography: Typography.Caption
+                        color: Theme.currentTheme.colors.textSecondaryColor
+                        text: qsTr("导入自己的 svg / png / ico，或从程序里提取。共 %1 个。")
+                            .arg(picker.customIcons.length)
+                    }
+                    Button {
+                        text: qsTr("添加图标")
+                        icon.name: "ic_fluent_add_20_regular"
+                        onClicked: {
+                            var key = ConfigManager.importIcon()
+                            if (key.length > 0) {
+                                picker.pendingKey = key
+                                picker.reloadCustom()
+                            }
+                        }
+                    }
+                    Button {
+                        text: qsTr("打开图标目录")
+                        icon.name: "ic_fluent_folder_open_20_regular"
+                        onClicked: ConfigManager.openIconFolder()
+                    }
+                }
+
+                IconGrid {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    icons: picker.customIcons.map(function (item) { return item.key })
+                    cellSize: picker.cellSize
+                    tint: Theme.currentTheme.colors.textColor
+                    selectedKey: picker.pendingKey
+                    deletable: true
+                    onPicked: picker.pendingKey = iconKey
+                    onRemoveRequested: {
+                        if (ConfigManager.deleteCustomIcon(iconKey)) {
+                            if (picker.pendingKey === iconKey) {
+                                picker.pendingKey = ""
+                            }
+                            picker.reloadCustom()
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: picker.customIcons.length === 0
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    wrapMode: Text.Wrap
+                    color: Theme.currentTheme.colors.textSecondaryColor
+                    text: qsTr("图标库还是空的。点「添加图标」挑一张图片，"
+                               + "或到「从程序提取」页把一个 exe / dll 的图标抠出来。")
+                }
+            }
+
+            // ── 3：从程序提取 ──
+            ColumnLayout {
+                spacing: 10
+
+                Text {
+                    Layout.fillWidth: true
+                    typography: Typography.Caption
+                    color: Theme.currentTheme.colors.textSecondaryColor
+                    text: qsTr("选一个 exe / dll / 快捷方式，程序会向系统要它的图标，"
+                               + "存进图标库后就能在别处复用。")
+                }
+
+                FormRow {
+                    label: qsTr("文件")
+                    TextField {
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("程序或 DLL 的路径")
+                        text: picker.extractPath
+                        onTextChanged: picker.extractPath = text
+                    }
+                    Button {
+                        text: qsTr("浏览…")
+                        icon.name: "ic_fluent_folder_open_20_regular"
+                        onClicked: {
+                            var path = ConfigManager.pickProgram()
+                            if (path.length > 0) {
+                                picker.extractPath = path
+                            }
+                        }
+                    }
+                    Button {
+                        text: qsTr("提取图标")
+                        icon.name: "ic_fluent_arrow_download_20_regular"
+                        highlighted: true
+                        enabled: picker.extractPath.length > 0
+                        onClicked: {
+                            var key = ConfigManager.extractIcon(picker.extractPath)
+                            if (key.length > 0) {
+                                picker.extractPreview = key
+                                picker.pendingKey = key
+                                picker.reloadCustom()
+                            }
+                        }
+                    }
+                }
+
+                Frame {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 132
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 16
+
+                        AppIcon {
+                            Layout.alignment: Qt.AlignVCenter
+                            iconKey: picker.extractPreview
+                            iconSize: 64
+                            placeholder: "ic_fluent_image_20_regular"
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 4
+
+                            Text {
+                                Layout.fillWidth: true
+                                wrapMode: Text.NoWrap
+                                elide: Text.ElideMiddle
+                                color: Theme.currentTheme.colors.textColor
+                                text: picker.extractPreview.length > 0
+                                    ? qsTr("已提取，可以直接使用")
+                                    : qsTr("还没有提取结果")
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                wrapMode: Text.NoWrap
+                                elide: Text.ElideMiddle
+                                typography: Typography.Caption
+                                color: Theme.currentTheme.colors.textSecondaryColor
+                                text: picker.extractPreview
+                            }
+                        }
+
+                        Button {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: qsTr("去图标库看看")
+                            enabled: picker.extractPreview.length > 0
+                            onClicked: tabs.currentIndex = 2
+                        }
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+            }
+        }
+    }
+
+    footer: RowLayout {
+        spacing: 8
+
+        AppIcon {
+            Layout.alignment: Qt.AlignVCenter
+            iconKey: picker.pendingKey
+            iconSize: 20
+            placeholder: "ic_fluent_dismiss_20_regular"
+        }
+        Text {
+            Layout.fillWidth: true
+            wrapMode: Text.NoWrap
+            elide: Text.ElideMiddle
+            typography: Typography.Caption
+            color: Theme.currentTheme.colors.textSecondaryColor
+            text: picker.pendingKey.length > 0 ? picker.pendingKey : qsTr("未选择")
+        }
+
+        Button {
+            text: qsTr("取消")
+            onClicked: picker.reject()
+        }
+
+        Button {
+            text: qsTr("使用这个图标")
+            highlighted: true
+            enabled: picker.pendingKey.length > 0
+            onClicked: {
+                picker.picked(picker.pendingKey)
+                picker.accept()
             }
         }
     }

@@ -112,6 +112,7 @@ Item {
         anchors.right: clearButton.left
         anchors.rightMargin: 6
         anchors.verticalCenter: parent.verticalCenter
+        wrapMode: Text.NoWrap
         elide: Text.ElideRight
         font.family: "Consolas"
         color: field.value

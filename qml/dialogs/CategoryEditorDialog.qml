@@ -9,7 +9,7 @@ import "../components"
 //
 // 分区在配置里以「名字」被条目引用，因此重命名会级联更新条目 —— 这一步由
 // ConfigManager.updateCategory() 在写入时完成，这里只负责校验与提交。
-Dialog {
+AppDialog {
     id: editor
 
     property var category: null       // null 表示新建
@@ -19,12 +19,14 @@ Dialog {
     signal saved()
 
     title: isNew ? qsTr("新建分区") : qsTr("编辑分区")
-    modal: true
-    width: 560
-    closePolicy: Popup.NoAutoClose
+    preferredWidth: 560
+    closeOnScrim: false
 
+    // parent 显式指到弹窗根上：默认内容会被 body 那个 Layout 接管，嵌套弹窗
+    // 要铺满整页就不能待在布局里。
     IconPickerDialog {
         id: iconPicker
+        parent: editor
         onPicked: editor.iconKey = iconKey
     }
 
@@ -58,6 +60,7 @@ Dialog {
             }
             Text {
                 Layout.fillWidth: true
+                wrapMode: Text.NoWrap
                 elide: Text.ElideMiddle
                 font.family: "Consolas"
                 color: Theme.currentTheme.colors.textSecondaryColor

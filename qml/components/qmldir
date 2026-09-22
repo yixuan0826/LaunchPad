@@ -1,8 +1,11 @@
 AppIcon 1.0 AppIcon.qml
+CompactRow 1.0 CompactRow.qml
 CompactTile 1.0 CompactTile.qml
 FormRow 1.0 FormRow.qml
 HotkeyField 1.0 HotkeyField.qml
+IconGrid 1.0 IconGrid.qml
 KeymouseStepDelegate 1.0 KeymouseStepDelegate.qml
+MiniIconButton 1.0 MiniIconButton.qml
 SettingsGroup 1.0 SettingsGroup.qml
-SlotPicker 1.0 SlotPicker.qml
+SlotListEditor 1.0 SlotListEditor.qml
 ZoneHeader 1.0 ZoneHeader.qml
