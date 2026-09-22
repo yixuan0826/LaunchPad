@@ -34,12 +34,16 @@ AppDialog {
     signal saved()
 
     title: index < 0 ? qsTr("添加槽位") : qsTr("编辑槽位")
-    modal: true
     preferredWidth: 620
     preferredHeight: 560
+    // 表单里有没保存的改动，点遮罩别把输入丢掉。
+    closeOnScrim: false
 
+    // parent 显式指到弹窗根上：默认内容会被 body 那个 Layout 接管，嵌套弹窗
+    // 要铺满整页就不能待在布局里。
     IconPickerDialog {
         id: iconPicker
+        parent: editor
         onPicked: editor.iconKey = iconKey
     }
 

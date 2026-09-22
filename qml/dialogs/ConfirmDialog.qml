@@ -18,9 +18,7 @@ AppDialog {
     property var callback: null
 
     title: qsTr("确认")
-    modal: true
     preferredWidth: 420
-    closePolicy: Popup.NoAutoClose
 
     function ask(text, action, options) {
         message = text

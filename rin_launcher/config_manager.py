@@ -211,7 +211,6 @@ def _list_drives() -> list[dict[str, Any]]:
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "theme": "system",
-    "language": "zh_CN",
     "showTray": True,
     "startMinimized": False,
     "autoStart": False,
@@ -223,13 +222,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "material": "tabbed",
     # 小窗是桌面挂件，单独走亚克力（不吃完整窗口那套材质设置）。
     "compactAcrylic": True,
-    "searchEngine": "https://www.bing.com/search?q={query}",
-    "gridColumns": 8,
-    "itemSize": 96,
     "animationEnabled": True,
     "accentColor": "#0078d4",
-    "fontFamily": "Microsoft YaHei UI",
-    "fontSize": 12,
     "adminAutoElevate": True,
     "confirmAdminActions": True,
     "logLevel": "INFO",

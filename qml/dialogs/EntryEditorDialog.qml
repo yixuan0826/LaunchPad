@@ -26,13 +26,15 @@ AppDialog {
     signal saved()
 
     title: isNew ? qsTr("新建条目") : qsTr("编辑条目")
-    modal: true
     preferredWidth: 720
     preferredHeight: 620
-    closePolicy: Popup.NoAutoClose
+    closeOnScrim: false
 
+    // parent 显式指到弹窗根上：默认内容会被 body 那个 Layout 接管，嵌套弹窗
+    // 要铺满整页就不能待在布局里。
     IconPickerDialog {
         id: iconPicker
+        parent: editor
         onPicked: editor.iconKey = iconKey
     }
 

@@ -24,9 +24,9 @@ AppDialog {
     readonly property int cellSize: 56
 
     title: qsTr("选择图标")
-    modal: true
     preferredWidth: 780
     preferredHeight: 620
+    closeOnScrim: false
 
     // ── 数据 ──
     property var bundledIcons: []
