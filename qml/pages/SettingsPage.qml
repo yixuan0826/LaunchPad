@@ -144,17 +144,6 @@ Item {
                             onCheckedChanged: settingsPage.apply("showTray", checked)
                         }
                     }
-
-                    FormRow {
-                        label: qsTr("小窗置顶")
-                        description: qsTr("常驻小窗始终显示在其他窗口之上")
-                        Switch {
-                            id: topSwitch
-                            checkedText: qsTr("开")
-                            uncheckedText: qsTr("关")
-                            onCheckedChanged: settingsPage.apply("alwaysOnTop", checked)
-                        }
-                    }
                 }
 
                 // ── 外观 ──
@@ -469,7 +458,6 @@ Item {
         autoStartSwitch.checked = model.autoStart === true
         startMinimizedSwitch.checked = model.startMinimized === true
         traySwitch.checked = model.showTray !== false
-        topSwitch.checked = model.alwaysOnTop !== false
 
         themeCombo.currentIndex = Math.max(0, ["system", "light", "dark"].indexOf(model.theme))
         accentPicker.color = model.accentColor || "#0078d4"

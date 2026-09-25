@@ -3,7 +3,7 @@
 基于 **RinUI（PySide6 + QML）** 的桌面启动台。常驻在桌面右下角的**小窗**负责「点一下就用」，
 **完整窗口**负责「把东西管起来、照自己的习惯调」。
 
-- 常驻小窗：无边框亚克力挂件，锚在桌面右下角（不抢焦点、不进任务栏），高度固定为桌面可用高度的一半，可拖动并记住位置
+- 常驻小窗：无边框亚克力的桌面挂件，锚在主显示器右下角（不抢焦点、不进任务栏、**沉底**，不会盖住别的窗口），高度固定为桌面可用高度的一半
 - 完整窗口：`FluentWindow` + RinUI `NavigationView`（侧边导航 / 启动台 · 档案 · 设置 · 关于），材质走 RinUI 的**增强云母**
 - 启动台三行都是**可增删排序的槽位**：常用应用 / 快捷功能 / 存储与磁盘，每格能换内容、改名字、换图标
 - 图标：RinUI 的 Fluent 字体图标、随包的 [Lawnicons](https://github.com/LawnchairLauncher/lawnicons) SVG、
@@ -17,12 +17,13 @@
 
 | | |
 | --- | --- |
-| 🪟 **常驻小窗** | 亚克力材质的无焦点挂件锚在桌面右下角、高度为桌面一半；三行槽位可增删排序，可拖动并记住位置 |
+| 🪟 **常驻小窗** | 亚克力材质的无焦点桌面挂件：固定主显示器右下角、沉在普通窗口之下；三行槽位可增删排序 |
 | 🚀 **启动台设置** | 完整窗口的「启动台」页直接编辑小窗那三行：加一格 / 换内容 / 改名字 / 换图标 / 前后挪 / 删掉，改完小窗立即刷新 |
+| 🧩 **槽位自由定义** | 「动作」类槽位既可以直接引用档案条目，也可以**内联自定义**：文件 / 命令行 / 网址 / 键鼠模拟当场填完，不用先建条目 |
 | 💾 **U 盘与磁盘分开** | 「可移动磁盘（自动检测）」和「指定的文件/文件夹/磁盘」是两种独立槽位，各自一格，互不影响 |
 | 🖱 **右键菜单** | 小窗每一格右键：打开 · 提权打开 · 编辑这一格 · 再加一格 |
 | 🗂 **档案编辑器** | 分区与条目的可视化增删改、排序、启停、批量操作，全程不用手改 YAML |
-| 🎨 **图标选择器** | 四个来源分页（内置 / 随包 / 我的 / 从程序提取），选中态一目了然，支持导入 svg·png·ico 与从 exe·dll 提取 |
+| 🎨 **图标选择器** | 四个来源分页（内置 / 随包 / 我的 / 从文件获取），选中态一目了然；支持 exe·dll·lnk 提取与 ico·svg·png 导入 |
 | ⚙️ **完整设置页** | 顶部锚点跳转 常规 / 外观 / 启动台 / 热键 / 高级，改完立即生效；「关于」是独立一页 |
 | 📌 **系统托盘** | 显示、隐藏、跳转页面、打开配置目录、重载配置、退出 |
 | ⌨️ **全局热键** | 默认 `Ctrl+Space`，在设置页点一下直接录制组合键 |
@@ -38,19 +39,19 @@
 
 ### 常驻小窗（启动台）
 
-一块无边框的**亚克力挂件**贴在桌面右下角，高度是桌面可用高度的一半。它点得动，但
-**不接受焦点、不进任务栏** —— 用起来像桌面上的一个部件，而不是一个会抢走当前焦点的窗口。
+一块无边框的**亚克力挂件**贴在主显示器右下角，高度是桌面可用高度的一半。它点得动，但
+**不接受焦点、不进任务栏、也不盖在别的窗口上面**（永远沉在 Z 序最底）—— 用起来像贴在
+桌面上的一块部件。想看它时按 `Win+D` 回到桌面，或者关掉挡着它的窗口。
 自上而下：
 
-1. **标题条** — 左边是程序图标（无底板）+「启动台」字样，右边一个小钉子提示是否置顶；
-   这一条同时是拖拽区
+1. **标题条** — 左边是程序图标（无底板）+「启动台」字样
 2. **第一行 · 常用应用** — 大格子，左键启动，右键出菜单
 3. **第二行 · 快捷功能** — 小格子，放内置动作：启动台设置、档案管理、设置、配置目录、
    配置文件、重载配置、提权重启、隐藏小窗、退出程序
 4. **第三行 · 存储与磁盘** — 最左边那张固定卡片是配置好的存储目录（显示剩余空间与占用条），
    后面跟着两种**互相独立**的磁盘入口：自动检测的「可移动磁盘」和指定的「文件/文件夹/磁盘」
 5. **底部条** — `打开完整窗口` + 启动台设置 / 档案 / 设置 / 更多（更多 → 启动台设置… ·
-   档案管理… · 设置… · 回到右下角 · 刷新磁盘信息 · 隐藏小窗 · 退出）
+   档案管理… · 设置… · 刷新磁盘信息 · 隐藏小窗 · 退出）
 
 三行都**不是定死的**：每一行有自己的槽位列表，可以加、删、前后挪，每格还能改名字、换图标 ——
 都在完整窗口的「启动台」页里配。引用失效（条目被删掉或停用）的槽位会自动跳过，不会留下
@@ -59,8 +60,7 @@
 每一格的右键菜单是 `打开` · `以管理员身份打开`（仅 `file` / `cmd` 条目）· `编辑这一格…` ·
 `再加一格…`。
 
-拖标题条就能移动窗口，位置写进 `settings.compactPos`，下次启动回到原处；想让它重新贴回
-右下角，用「更多 → 回到右下角」。
+位置固定，不拖动、不记忆：每次显示都贴回主显示器右下角（任务栏挪动 / 分辨率变化也会重贴）。
 
 窗口**不会被关闭按钮关掉**（它本来就没有标题栏）—— 隐藏与退出都在「更多」菜单和托盘里。
 
@@ -70,7 +70,8 @@
 
 - **启动台** — 小窗那三行的列表编辑器。每一行一个列表，每项都能上移 / 下移 / 编辑 / 删除，
   行尾是「加一格」；第三行另有一栏填固定的存储目录（可手填、可「浏览…」、可直接打开）。
-  改完立即写盘，小窗跟着刷新。
+  「动作」类的格子有两种来源：引用档案条目，或直接自定义动作（类型 / 目标 / 参数 /
+  工作目录 / 提权 / 键鼠序列）。改完立即写盘，小窗跟着刷新。
 - **档案** — 左边是分区清单（改名 / 换图标 / 排序 / 删除），右边是选中分区里的条目。
   顶部工具条管整页：导入 / 导出 / 新建分区 / 新建条目；条目区自己还有过滤框和全选，
   勾选若干条之后会浮出批量操作条（启用 / 停用 / 删除）。每张条目卡上有上移 / 下移 /
@@ -84,7 +85,7 @@
 
 | 分组 | 内容 |
 | --- | --- |
-| 常规 | 开机自动启动、启动时最小化、系统托盘图标、小窗置顶 |
+| 常规 | 开机自动启动、启动时最小化、系统托盘图标 |
 | 外观 | 主题模式、强调色、**窗口材质**（增强云母 / 云母 / 不透明）、**小窗亚克力**、动画效果 |
 | 启动台 | 小窗的**行为**（内容在「启动台」页调）：跳到启动台设置、刷新磁盘信息 |
 | 热键 | 全局热键录制（含恢复默认） |
@@ -136,11 +137,23 @@ python -m rin_launcher.main
 ```bash
 pip install pyinstaller
 pyinstaller build.spec
-# 产物：dist/RinLauncher.exe
+# 产物：dist/RinLauncher.exe（单文件，约 65MB）
 ```
 
 `build.spec` 会把 `qml/`、`RinUI/`、`assets/` 一并打进去——QML、字体、图标都不是
 Python 模块，漏掉任何一个都会导致运行期找不到资源。
+
+spec 里做了两层**体积过滤**：`EXCLUDES` 排掉用不到的 PySide6 绑定（WebEngine、3D、
+多媒体、图表……），分析完再按名字把对应的 Qt 运行库与 QML 模块从 binaries / datas 里
+剔出去——PySide6 的 hook 默认会把整套 Qt 都带上，滤完单文件从 ~160MB 降到了 ~65MB。
+
+想要**更快的启动**（省去每次启动的解压，实测 ~5s → 单文件约 ~10s），可以构建目录形态：
+
+```bash
+# PowerShell
+$env:RIN_ONEDIR="1"; pyinstaller build.spec; Remove-Item Env:RIN_ONEDIR
+# 产物：dist/RinLauncher/（整个目录一起分发，入口是里面的 RinLauncher.exe）
+```
 
 ---
 
@@ -187,6 +200,8 @@ categories:
 launcher:                             # 常驻小窗那三行，内容是「槽位」列表
   slots:                              # 行内顺序 = 数组顺序，row 决定落在哪一行
     - {kind: "action", row: 0, ref: "9f3c1a7b", label: "", icon: ""}
+    # 也可以内联动作：不必先进「档案」，两种写法二选一
+    - {kind: "action", row: 0, action: {type: "cmd", target: "wt.exe"}, label: "终端", icon: ""}
     - {kind: "tool", row: 1, key: "configFolder", label: "", icon: ""}
     - {kind: "usb", row: 2, label: "U 盘", icon: ""}
     - {kind: "path", row: 2, label: "D 盘", path: "D:\\", icon: ""}
@@ -200,12 +215,10 @@ settings:
   showTray: true
   startMinimized: false
   autoStart: false
-  alwaysOnTop: true
   animationEnabled: true
   adminAutoElevate: true
   confirmAdminActions: true
   globalHotkey: "Ctrl+Space"
-  compactPos: ""                      # 常驻小窗位置 "x,y"，空串 = 贴右下角
   logLevel: "INFO"                    # DEBUG | INFO | WARNING | ERROR
 ```
 
@@ -222,11 +235,12 @@ settings:
 
 | 键 | 作用 |
 | --- | --- |
-| `kind` | `action`（引用档案条目）/ `tool`（内置功能）/ `path`（任意文件 · 文件夹 · 磁盘）/ `usb`（自动检测的可移动磁盘） |
+| `kind` | `action`（动作：引用条目或内联定义）/ `tool`（内置功能）/ `path`（任意文件 · 文件夹 · 磁盘）/ `usb`（自动检测的可移动磁盘） |
 | `row` | 落在第几行：`0` / `1` / `2` |
 | `label` | 覆盖显示名，空串 = 用目标自己的名字 |
 | `icon` | 覆盖图标，空串 = 用目标自己的图标 |
-| `ref` | 仅 `action`：条目 id |
+| `ref` | 仅 `action`：引用档案条目的 id（与 `action` 二选一） |
+| `action` | 仅 `action`：内联动作定义，字段与「动作类型」一节一致（`type` / `target` / `arguments` / `working_dir` / `run_as` / `keymouse_steps`） |
 | `key` | 仅 `tool`：内置功能的 key |
 | `path` | 仅 `path`：要打开的路径（支持 `~` 与环境变量） |
 
@@ -243,6 +257,7 @@ settings:
 | `elevate` | 提权重启 | 以管理员身份重启（仅 Windows） |
 | `hide` | 隐藏小窗 | 收起常驻小窗 |
 | `quit` | 退出程序 | 退出 Rin Launcher |
+> （内联动作的槽位不受影响）
 
 > `action` 槽位引用的条目被删掉或停用时，这一格会**整格消失** —— 不留空位、也不报错。
 > 旧格式（只有 `apps` / `tools` 两行固定槽位、没有 `slots`）在读取时会被自动翻译成新结构：
@@ -260,9 +275,7 @@ settings:
 | `showTray` | `true` | 是否创建托盘图标 |
 | `startMinimized` | `false` | 启动时不显示常驻小窗 |
 | `autoStart` | `false` | 开机自启，写 `HKCU\...\Run`（仅 Windows） |
-| `alwaysOnTop` | `true` | 常驻小窗置顶；完整窗口保持普通窗口行为 |
 | `globalHotkey` | `Ctrl+Space` | 全局热键，切换常驻小窗显示/隐藏 |
-| `compactPos` | `""` | 常驻小窗位置，`"x,y"`；空串表示贴右下角（由「回到右下角」写回空） |
 | `logLevel` | `INFO` | 日志级别，**改动需重启生效** |
 | `animationEnabled` | `true` | 预留，见「已知限制」 |
 | `adminAutoElevate` | `true` | 预留，见「已知限制」 |
@@ -350,9 +363,10 @@ SVG 后面会透出字形，看着就是两层图标叠在一起。现在没有�
 | 内置图标 | RinUI 自带的一百多个常用 Fluent 字体图标 |
 | 随包图标 | `assets/icons/lawnicons/` 里的全部 Lawnicons，跟着主题色变 |
 | 我的图标 | 图标库里的自定义图标；「添加图标」导入 svg / png / ico，或直接删掉不要的 |
-| 从程序提取 | 挑一个 exe / dll / 快捷方式，向系统要它的图标，提取结果会落进图标库 |
+| 从文件获取 | `exe` / `dll` / `lnk` → 向系统要图标（快捷方式跟随目标）；`ico` / `svg` / `png` / `jpg` / `bmp` → 直接导入。各编辑器的图标行也有直达入口 |
 
-提取走 Qt 的 `QFileIconProvider`：Windows 上它直接问系统外壳，能拿到 exe 里嵌的图标；
+提取（`exe` / `dll` / `lnk`）走 Qt 的 `QFileIconProvider`：Windows 上它直接问系统外壳，能拿到
+exe 里嵌的图标；`.lnk` 会先解析到目标再取，拿到的是程序自己的图标而不是带小箭头的那张。
 非 Windows 上会退化成一个通用图标，功能不至于报错消失。
 
 图标名必须真实存在，否则会渲染成空白。可查范围：
@@ -388,8 +402,8 @@ python scripts/vendor_lawnicons.py --source /path/to/lawnicons/svgs
 │   ├── LauncherWindow.qml       # 完整窗口（FluentWindow + NavigationView）
 │   ├── pages/                   # 启动台 / 档案 / 设置 / 关于
 │   ├── dialogs/                 # AppDialog 基类 + 条目 / 分区 / 槽位编辑器、图标选择器、确认框
-│   ├── components/              # AppIcon / CompactRow / CompactTile / SlotListEditor /
-│   │                            # IconGrid / MiniIconButton / FormRow / SettingsGroup …
+│   ├── components/              # AppIcon / ActionForm / CompactRow / CompactTile /
+│   │                            # SlotListEditor / IconGrid / MiniIconButton / FormRow …
 │   └── qmldir
 ├── RinUI/                       # RinUI 库（内联，MIT）
 ├── assets/
@@ -408,16 +422,19 @@ python scripts/vendor_lawnicons.py --source /path/to/lawnicons/svgs
 `FluentWindow` 系（`FluentWindowBase`）在 Windows 上会主动补回 `WS_CAPTION` 并同步原生边框，
 是给「带标题栏的普通窗口」用的，做成桌面挂件会多出一条系统标题栏。所以小窗的根是一个普通的
 `QtQuick.Window`：`Qt.FramelessWindowHint | Qt.Tool`（工具窗口不占任务栏）+
-`Qt.WindowDoesNotAcceptFocus`，窗口本身 `color: "transparent"`，卡片是里面自己画的圆角
-矩形 + 投影。置顶不写死在 QML 里，跟着 `settings.alwaysOnTop` 由 `main.py` 加/减
-`WindowStaysOnTopHint`，两边都写会互相打架。
+`Qt.WindowDoesNotAcceptFocus | Qt.WindowStaysOnBottomHint`。置底写进窗口 flags，`main.py`
+在窗口显示后再用 `SetWindowPos(HWND_BOTTOM)` 兜一次底（`effects.apply_bottom_layer`），
+防止刚显示时被抬到前台。窗口与卡片**同尺寸、不描边**：圆角与材质由 DWM 统一处理，外面不再
+留那圈 10px 的透明边——之前看着像「玻璃边框」的就是它。位置固定主显示器右下角，
+不拖动、不记忆。
 
 **小窗的亚克力是自己上的**
 小窗不是 RinUI 窗口，够不到 RinUI 那套 backdrop 机制，所以 `effects.py` 直接走 DWM：
 Win11 22H2+ 用 `DWMWA_SYSTEMBACKDROP_TYPE`（亚克力 = `DWMSBT_TRANSIENTWINDOW`），21H2 退回
 `DWMWA_MICA_EFFECT`，Win10 再退回 `SetWindowCompositionAttribute`。非 Windows 上全是安全空操作，
-返回 `False` 之后 QML 把卡片画成接近不透明的纯色兜底，功能不受影响。无焦点则靠
-`WS_EX_NOACTIVATE`：鼠标点得动，但窗口不会变成前台窗口，也不会把用户正在打字的目标挤下去。
+返回 `False` 之后 QML 把卡片画成接近不透明的纯色兜底，功能不受影响。无焦点与置底则靠
+`WS_EX_NOACTIVATE` 加 `HWND_BOTTOM`：鼠标点得动，但窗口不会变成前台窗口，也不会把用户正在
+打字的目标挤下去；Z 序永远在普通窗口之下。
 
 **完整窗口的材质交给 RinUI**
 「增强云母」是 RinUI backdrop 里的 `tabbed`，对应的设置就是 `settings.material`
@@ -485,6 +502,8 @@ RinUI 的 `NavigationView` 在推送页面时会把页面的 `objectName` 覆盖
   会被写进配置、界面也能改，但还没有代码消费它们。
 - **小窗高度不可调**：固定为桌面可用高度的一半，不提供缩放。三行的**内容**可以随便增删，
   但「三行」这个结构本身是定的（槽位的 `row` 只有 `0` / `1` / `2`）。
+- **小窗固定沉底**：它永远位于普通窗口之下（桌面之上），被最大化窗口挡住属预期行为；
+  热键只负责显示 / 隐藏，不会把它抬到最前 —— 那会破坏「不抢焦点」的定位。
 - **托盘依赖系统支持**：`QSystemTrayIcon.isSystemTrayAvailable()` 为假时不会创建托盘。
   完整窗口依旧可以关掉自己，但要重新叫出小窗就只能靠全局热键了。
 - **提权、开机启动、亚克力都仅 Windows**：`elevation.py` 走的是 `ShellExecuteExW` 与注册表，

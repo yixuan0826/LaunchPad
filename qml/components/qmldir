@@ -1,4 +1,5 @@
 AppIcon 1.0 AppIcon.qml
+ActionForm 1.0 ActionForm.qml
 CompactRow 1.0 CompactRow.qml
 CompactTile 1.0 CompactTile.qml
 FormRow 1.0 FormRow.qml

@@ -9,6 +9,8 @@ import "../components"
 //
 // 槽位有四种，表单里只显示与当前类型相关的那几行 —— 与其把所有字段都摆出来再
 // 灰掉，不如按类型换表单，少一层判断也少一处看走眼的机会。
+// 「动作」类槽位有两种来源：引用「档案」里的条目（默认），或者直接在这里把
+// 动作写全（内联动作，不需要先建条目）。
 AppDialog {
     id: editor
 
@@ -18,6 +20,7 @@ AppDialog {
 
     // ── 表单状态 ──
     property string kind: "action"
+    property string actionSource: "archive"   // archive | custom
     property string ref: ""
     property string toolKey: ""
     property string path: ""
@@ -99,7 +102,8 @@ AppDialog {
             ComboBox {
                 Layout.fillWidth: true
                 Layout.maximumWidth: 300
-                model: ["档案条目", "内置功能", "文件 / 文件夹 / 磁盘", "可移动磁盘（自动检测）"]
+                model: [qsTr("动作（档案条目 / 自定义）"), qsTr("内置功能"),
+                        qsTr("文件 / 文件夹 / 磁盘"), qsTr("可移动磁盘（自动检测）")]
                 currentIndex: editor.kindIndex
                 function onActivated(index) {
                     editor.kind = editor.indexOfKind(index)
@@ -107,9 +111,25 @@ AppDialog {
             }
         }
 
-        // ── 档案条目 ──
+        // ── 动作来源：档案条目 / 自定义动作 ──
         FormRow {
             visible: editor.kind === "action"
+            label: qsTr("来源")
+            description: qsTr("引用档案里的条目，或直接在这里把动作写全")
+            ComboBox {
+                Layout.fillWidth: true
+                Layout.maximumWidth: 320
+                model: [qsTr("档案条目"), qsTr("自定义动作")]
+                currentIndex: editor.actionSource === "custom" ? 1 : 0
+                function onActivated(index) {
+                    editor.actionSource = index === 1 ? "custom" : "archive"
+                }
+            }
+        }
+
+        // ── 档案条目 ──
+        FormRow {
+            visible: editor.kind === "action" && editor.actionSource === "archive"
             label: qsTr("条目")
             description: qsTr("候选来自「档案」页")
             ComboBox {
@@ -121,6 +141,12 @@ AppDialog {
                     editor.ref = editor.actionIds[index] || ""
                 }
             }
+        }
+
+        // ── 自定义动作：槽位自带完整定义，不必先进「档案」──
+        ActionForm {
+            id: inlineAction
+            visible: editor.kind === "action" && editor.actionSource === "custom"
         }
 
         // ── 内置功能 ──
@@ -221,6 +247,14 @@ AppDialog {
                     iconPicker.open()
                 }
             }
+            ToolButton {
+                icon.name: "ic_fluent_arrow_download_20_regular"
+                ToolTip.text: qsTr("从文件获取图标（程序 / 快捷方式 / 图片）")
+                onClicked: {
+                    iconPicker.current = editor.iconKey
+                    iconPicker.openTab(3)
+                }
+            }
             AppIcon {
                 Layout.alignment: Qt.AlignVCenter
                 iconKey: editor.iconKey
@@ -282,6 +316,9 @@ AppDialog {
             return label
         }
         if (kind === "action") {
+            if (actionSource === "custom") {
+                return editor.deriveActionName()
+            }
             var at = actionIds.indexOf(ref)
             return at >= 0 ? actionNames[at] : qsTr("未选择条目")
         }
@@ -295,9 +332,27 @@ AppDialog {
         return path.length > 0 ? path : qsTr("未设置路径")
     }
 
+    // 内联动作没有名字：按类型从目标里取一个一眼能懂的显示名（与后端一致）。
+    function deriveActionName() {
+        var data = inlineAction.read()
+        if (data.type === "keymouse") {
+            return qsTr("键鼠动作")
+        }
+        if (data.target.length === 0) {
+            return qsTr("未配置动作")
+        }
+        if (data.type === "url") {
+            return data.target
+        }
+        var parts = data.target.replace(/\\/g, "/").split("/")
+        return parts[parts.length - 1] || data.target
+    }
+
     readonly property string previewDetail: {
         if (kind === "action") {
-            return qsTr("档案条目 · 候选来自档案页")
+            return actionSource === "custom"
+                ? qsTr("自定义动作 · 直接写在这一格里")
+                : qsTr("档案条目 · 候选来自档案页")
         }
         if (kind === "tool") {
             return qsTr("内置功能")
@@ -335,6 +390,9 @@ AppDialog {
         path = slot.path || ""
         label = slot.label || ""
         iconKey = slot.icon || ""
+        // 内联动作与条目引用二选一；两者都写过时按后端的口径以 ref 为准。
+        actionSource = (slot.action && !slot.ref) ? "custom" : "archive"
+        inlineAction.load(slot.action || {})
 
         // 候选每次都重取：档案可能刚改过。
         var actions = ConfigManager.getActions()
@@ -350,7 +408,14 @@ AppDialog {
     }
 
     function commit() {
-        if (kind === "action" && ref.length === 0) {
+        var customAction = kind === "action" && actionSource === "custom"
+        if (customAction) {
+            var invalid = inlineAction.validate()
+            if (invalid.length > 0) {
+                ConfigManager.notify(invalid, "warning")
+                return
+            }
+        } else if (kind === "action" && ref.length === 0) {
             ConfigManager.notify(qsTr("请先选一个档案条目"), "warning")
             return
         }
@@ -363,9 +428,10 @@ AppDialog {
             "kind": kind,
             "label": label.trim(),
             "icon": iconKey,
-            "ref": kind === "action" ? ref : "",
+            "ref": (kind === "action" && !customAction) ? ref : "",
             "key": kind === "tool" ? toolKey : "",
-            "path": kind === "path" ? path.trim() : ""
+            "path": kind === "path" ? path.trim() : "",
+            "action": customAction ? inlineAction.read() : null
         }
         var ok = index < 0
             ? ConfigManager.addLauncherSlot(row, payload)

@@ -1,7 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 2.15
-import Qt5Compat.GraphicalEffects
 import RinUI
 // QtQuick.Window 必须排在 RinUI 后面：QML 里后导入的类型优先级更高，否则 Window
 // 会解析到 RinUI 那套自带标题栏与背景矩形的窗口包装，桌面挂件就变成普通窗口了。
@@ -15,25 +14,28 @@ import "components"
 //
 // 三行都是可增删排序的槽位（在完整窗口的「启动台」页里配）：
 //   第一行 常用应用 / 第二行 快捷功能 / 第三行 存储位置 + 磁盘入口
-// 高度固定为桌面可用高度的一半。窗口是亚克力材质的无焦点挂件 —— 点得动，
-// 但不抢焦点、不进任务栏（见 rin_launcher/effects.py）。
+// 窗口是「沉底」的桌面挂件：无边框、不抢焦点、不进任务栏，也不盖在别的窗口
+// 之上 —— 它贴在主显示器右下角，被普通窗口盖住，像桌面上的一块部件。
+// 高度固定为桌面可用高度的一半（见 rin_launcher/effects.py）。
 Window {
     id: compact
 
     // ── 形态 ──
-    // 投影要落在卡片外面，所以窗口比卡片大一圈，四周留出 shadowMargin 的透明边。
-    readonly property int shadowMargin: 10
+    // 窗口与卡片同尺寸：亚克力与系统圆角直接作用在窗口上，外面不套透明边，
+    // 也就没有那一圈「玻璃边框」。投影交给系统，QML 不再自绘。
     readonly property int edgeMargin: 16      // 贴边时与桌面边缘的距离
-    readonly property int contentMargin: 14
+    readonly property int contentMargin: 14   // 卡片内的内容留白
+    readonly property int cardRadius: 8       // 与 DWM 的窗口圆角保持一致
 
     width: 400
     height: Math.max(400, Math.round(Screen.desktopAvailableHeight / 2))
     visible: false
     color: "transparent"
     title: qsTr("启动台")
-    // 无边框 + 工具窗口（不占任务栏）+ 不接受焦点。置顶不在这里写死：它跟着
-    // settings.alwaysOnTop 走，由 Python 侧统一加/减 WindowStaysOnTopHint。
-    flags: Qt.FramelessWindowHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus
+    // 无边框 + 工具窗口（不占任务栏）+ 不接受焦点 + 全局置底。置底由这里声明，
+    // Python 侧显示时再用 SetWindowPos(HWND_BOTTOM) 兜一次底
+    // （见 effects.apply_bottom_layer）。
+    flags: Qt.FramelessWindowHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus | Qt.WindowStaysOnBottomHint
 
     // 亚克力是否真的上成功了（Windows 11 / 10 才有）。后端会 setProperty 进来：
     // 没上成功就把卡片画得实一点，免得在透明背景上看着发虚。
@@ -44,8 +46,6 @@ Window {
     property var toolSlots: []
     property var storageSlots: []
     property var storage: ({})
-    property bool cornerPinned: true
-    property bool alwaysOnTop: true
 
     // 小窗只发信号，窗口切换 / 退出这类跨窗口的活儿统一交给 Python 决定。
     signal openMainRequested(string page)
@@ -53,63 +53,39 @@ Window {
     signal quitRequested()
 
     // ------------------------------------------------------------------
-    // 位置：默认贴右下角；拖动过就记住坐标，直到在菜单里点「回到右下角」。
+    // 位置：固定贴主显示器右下角，不拖动、不记忆。
     // ------------------------------------------------------------------
     function snapToCorner() {
         // Screen 给的是窗口所在（未显示时是主）显示器的可用区域，已经排除任务栏。
         x = Screen.virtualX + Screen.desktopAvailableWidth - width - edgeMargin
         y = Screen.virtualY + Screen.desktopAvailableHeight - height - edgeMargin
-        cornerPinned = true
-        setSetting("compactPos", "")
     }
 
-    function restorePosition() {
-        var parts = String(ConfigManager.getSettings().compactPos || "").split(",")
-        var px = parseInt(parts[0], 10)
-        var py = parseInt(parts[1], 10)
-        if (parts.length === 2 && !isNaN(px) && !isNaN(py)) {
-            x = px
-            y = py
-            cornerPinned = false
-            return
+    // 显示时贴回右下角；分辨率 / 任务栏变化时窗口高度会跟着变，顺带重贴一次。
+    onVisibleChanged: {
+        if (visible) {
+            snapToCorner()
         }
-        snapToCorner()
     }
-
-    function persistPosition() {
-        if (cornerPinned) {
-            return
-        }
-        setSetting("compactPos", x + "," + y)
-    }
+    onHeightChanged: snapToCorner()
 
     // ------------------------------------------------------------------
     // 界面
     // ------------------------------------------------------------------
     Item {
         anchors.fill: parent
-        anchors.margins: compact.shadowMargin
 
         Rectangle {
             id: card
             anchors.fill: parent
-            radius: 14
+            radius: compact.cardRadius
             // 上了亚克力就走「几乎全透」，让系统的模糊透上来；否则退回半透明纯色。
+            // 不描边：窗口的圆角与材质归 DWM 管，卡片只负责填色，边界由材质自己
+            // 的明暗变化表达。
             color: Qt.rgba(Theme.currentTheme.colors.backgroundColor.r,
                            Theme.currentTheme.colors.backgroundColor.g,
                            Theme.currentTheme.colors.backgroundColor.b,
                            compact.acrylicActive ? 0.22 : 0.94)
-            border.width: 1
-            border.color: Theme.currentTheme.colors.windowBorderColor
-            layer.enabled: !compact.acrylicActive
-            layer.effect: DropShadow {
-                transparentBorder: true
-                horizontalOffset: 0
-                verticalOffset: 4
-                radius: 18
-                samples: 25
-                color: "#66000000"
-            }
         }
 
         ColumnLayout {
@@ -117,7 +93,7 @@ Window {
             anchors.margins: compact.contentMargin
             spacing: 10
 
-            // ── 标题条（同时是拖拽区）──
+            // ── 标题条 ──
             Item {
                 id: titleBar
                 Layout.fillWidth: true
@@ -145,27 +121,6 @@ Window {
                     }
 
                     Item { Layout.fillWidth: true }
-
-                    AppIcon {
-                        Layout.alignment: Qt.AlignVCenter
-                        visible: compact.alwaysOnTop
-                        iconKey: "ic_fluent_pin_20_regular"
-                        iconSize: 14
-                        tint: Theme.currentTheme.colors.primaryColor
-                    }
-                }
-
-                DragHandler {
-                    target: null
-                    onActiveChanged: {
-                        if (!active) {
-                            return
-                        }
-                        // startSystemMove() 阻塞到系统把窗口拖完，返回时 x/y 已是新位置。
-                        compact.startSystemMove()
-                        compact.cornerPinned = false
-                        compact.persistPosition()
-                    }
                 }
             }
 
@@ -527,11 +482,6 @@ Window {
         }
         MenuSeparator {}
         MenuItem {
-            text: qsTr("回到右下角")
-            icon.name: "ic_fluent_pin_20_regular"
-            onTriggered: compact.snapToCorner()
-        }
-        MenuItem {
             text: qsTr("刷新磁盘信息")
             icon.name: "ic_fluent_arrow_sync_20_regular"
             onTriggered: ConfigManager.refreshStorageInfo()
@@ -553,9 +503,8 @@ Window {
     property point pendingPoint: Qt.point(0, 0)
 
     Component.onCompleted: {
-        restorePosition()
+        snapToCorner()
         reload()
-        syncSettings()
     }
 
     Connections {
@@ -589,21 +538,6 @@ Window {
         return slots.filter(function (item) { return item.row === row })
     }
 
-    function syncSettings() {
-        var settings = ConfigManager.getSettings()
-        alwaysOnTop = settings.alwaysOnTop !== false
-    }
-
-    // 只在值真的变了才落盘：反复同步时不会白白重写配置。
-    function setSetting(key, value) {
-        if (ConfigManager.getSettings()[key] === value) {
-            return
-        }
-        var payload = {}
-        payload[key] = value
-        ConfigManager.updateSettings(payload)
-    }
-
     // ------------------------------------------------------------------
     // 交互
     // ------------------------------------------------------------------
@@ -623,11 +557,16 @@ Window {
         if (!slot || slot.kind !== "action") {
             return
         }
+        // 把解析出来的完整动作字段带过去：内联动作与档案条目都可能带参数 /
+        // 工作目录 / 键鼠序列，缺了会执行出不一样的结果。
         var payload = {
-            "id": slot.ref,
+            "id": slot.ref || "",
             "name": slot.name,
             "type": slot.type,
             "target": slot.target,
+            "arguments": slot.arguments || "",
+            "working_dir": slot.working_dir || "",
+            "keymouse_steps": slot.keymouse_steps || [],
             "run_as": "admin"
         }
         ConfigManager.executeAction(payload)

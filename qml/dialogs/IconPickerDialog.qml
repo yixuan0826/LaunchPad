@@ -8,7 +8,8 @@ import "../components"
 // 图标选择器。
 //
 // 四个来源分页：内置图标（RinUI 的 Fluent 字体）、随包图标（Lawnicons SVG）、
-// 我的图标（导入的 svg / png / ico，以及从程序里抽出来的），还有「从程序提取」。
+// 我的图标（导入的 svg / png / ico，以及从程序里抽出来的），还有「从文件获取」
+// （程序 / 快捷方式提取，或图片直接导入）。
 //
 // 两处和上一版不同的取舍：
 //   * 页签用 Segmented —— 自带选中态的填充与下划线，比裸 TabBar 一眼看得出；
@@ -18,6 +19,8 @@ AppDialog {
 
     property string current: ""
     property string pendingKey: ""
+    // 调用方指定打开时的页签（-1 = 按当前图标自动选）。
+    property int initialTab: -1
 
     signal picked(string iconKey)
 
@@ -88,9 +91,21 @@ AppDialog {
         bundledIcons = ConfigManager.getBundledIcons().map(
             function (name) { return "lawnicons:" + name })
         reloadCustom()
-        // 已经是用户自己的图标，就直接落在「我的图标」页。
-        tabs.currentIndex = current.indexOf("file:") === 0 ? 2
-            : current.indexOf("lawnicons:") === 0 ? 1 : 0
+        if (initialTab >= 0) {
+            // 调用方指定了页签（比如编辑器里直接点「从文件获取图标…」）。
+            tabs.currentIndex = initialTab
+            initialTab = -1
+        } else {
+            // 已经是用户自己的图标，就直接落在「我的图标」页。
+            tabs.currentIndex = current.indexOf("file:") === 0 ? 2
+                : current.indexOf("lawnicons:") === 0 ? 1 : 0
+        }
+    }
+
+    // 打开并直接翻到某一页。
+    function openTab(index) {
+        initialTab = index
+        open()
     }
 
     function reloadCustom() {
@@ -112,7 +127,7 @@ AppDialog {
             SegmentedItem { text: qsTr("内置图标") }
             SegmentedItem { text: qsTr("随包图标") }
             SegmentedItem { text: qsTr("我的图标") }
-            SegmentedItem { text: qsTr("从程序提取") }
+            SegmentedItem { text: qsTr("从文件获取") }
         }
 
         StackLayout {
@@ -176,7 +191,7 @@ AppDialog {
                         Layout.fillWidth: true
                         typography: Typography.Caption
                         color: Theme.currentTheme.colors.textSecondaryColor
-                        text: qsTr("导入自己的 svg / png / ico，或从程序里提取。共 %1 个。")
+                        text: qsTr("导入自己的 svg / png / ico，或从文件获取。共 %1 个。")
                             .arg(picker.customIcons.length)
                     }
                     Button {
@@ -225,11 +240,11 @@ AppDialog {
                     wrapMode: Text.Wrap
                     color: Theme.currentTheme.colors.textSecondaryColor
                     text: qsTr("图标库还是空的。点「添加图标」挑一张图片，"
-                               + "或到「从程序提取」页把一个 exe / dll 的图标抠出来。")
+                               + "或到「从文件获取」页把程序 / 快捷方式的图标取出来。")
                 }
             }
 
-            // ── 3：从程序提取 ──
+            // ── 3：从文件获取（程序提取 / 图片导入）──
             ColumnLayout {
                 spacing: 10
 
@@ -237,15 +252,16 @@ AppDialog {
                     Layout.fillWidth: true
                     typography: Typography.Caption
                     color: Theme.currentTheme.colors.textSecondaryColor
-                    text: qsTr("选一个 exe / dll / 快捷方式，程序会向系统要它的图标，"
-                               + "存进图标库后就能在别处复用。")
+                    text: qsTr("选一个 exe / dll / lnk，程序会向系统要它的图标（快捷方式跟随目标，"
+                               + "拿到的是程序自己的图标）；也可以直接挑一张 ico / svg / png 图片。"
+                               + "结果都会存进图标库，之后在别处可以复用。")
                 }
 
                 FormRow {
                     label: qsTr("文件")
                     TextField {
                         Layout.fillWidth: true
-                        placeholderText: qsTr("程序或 DLL 的路径")
+                        placeholderText: qsTr("程序、快捷方式或图片的路径")
                         text: picker.extractPath
                         onTextChanged: picker.extractPath = text
                     }
@@ -253,19 +269,19 @@ AppDialog {
                         text: qsTr("浏览…")
                         icon.name: "ic_fluent_folder_open_20_regular"
                         onClicked: {
-                            var path = ConfigManager.pickProgram()
+                            var path = ConfigManager.pickIconSource()
                             if (path.length > 0) {
                                 picker.extractPath = path
                             }
                         }
                     }
                     Button {
-                        text: qsTr("提取图标")
+                        text: qsTr("获取图标")
                         icon.name: "ic_fluent_arrow_download_20_regular"
                         highlighted: true
                         enabled: picker.extractPath.length > 0
                         onClicked: {
-                            var key = ConfigManager.extractIcon(picker.extractPath)
+                            var key = ConfigManager.acquireIcon(picker.extractPath)
                             if (key.length > 0) {
                                 picker.extractPreview = key
                                 picker.pendingKey = key

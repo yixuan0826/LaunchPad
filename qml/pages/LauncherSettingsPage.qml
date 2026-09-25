@@ -18,6 +18,9 @@ Item {
     readonly property int rowStorage: 2
 
     // 三行的解析结果（含名称/图标/目标），小窗拿的是同一份数据。
+    // 界面上显示的是「解析后」的列表（引用失效的槽位被后端跳过了），而编辑 /
+    // 删除 / 移动都要用「原始列表」里的下标 —— 结果里的 rowIndex 就是那座桥。
+    property var allSlots: []
     property var appSlots: []
     property var toolSlots: []
     property var storageSlots: []
@@ -112,7 +115,7 @@ Item {
                         onAddRequested: slotEditor.openFor(launcherSettings.rowApps, -1, null)
                         onEditRequested: launcherSettings.editSlot(launcherSettings.rowApps, index)
                         onRemoveRequested: launcherSettings.removeSlot(launcherSettings.rowApps, index)
-                        onMoveRequested: ConfigManager.moveLauncherSlot(
+                        onMoveRequested: launcherSettings.moveSlot(
                                              launcherSettings.rowApps, index, delta)
                     }
                 }
@@ -139,7 +142,7 @@ Item {
                         onAddRequested: slotEditor.openFor(launcherSettings.rowTools, -1, null)
                         onEditRequested: launcherSettings.editSlot(launcherSettings.rowTools, index)
                         onRemoveRequested: launcherSettings.removeSlot(launcherSettings.rowTools, index)
-                        onMoveRequested: ConfigManager.moveLauncherSlot(
+                        onMoveRequested: launcherSettings.moveSlot(
                                              launcherSettings.rowTools, index, delta)
                     }
                 }
@@ -203,7 +206,7 @@ Item {
                         onAddRequested: slotEditor.openFor(launcherSettings.rowStorage, -1, null)
                         onEditRequested: launcherSettings.editSlot(launcherSettings.rowStorage, index)
                         onRemoveRequested: launcherSettings.removeSlot(launcherSettings.rowStorage, index)
-                        onMoveRequested: ConfigManager.moveLauncherSlot(
+                        onMoveRequested: launcherSettings.moveSlot(
                                              launcherSettings.rowStorage, index, delta)
                     }
                 }
@@ -226,6 +229,7 @@ Item {
     function reload() {
         // 一次取全，再按行分好 —— 比每行各调一次少三倍的解析。
         var slots = ConfigManager.getLauncherSlots()
+        allSlots = slots
         appSlots = filterRow(slots, rowApps)
         toolSlots = filterRow(slots, rowTools)
         storageSlots = filterRow(slots, rowStorage)
@@ -249,9 +253,26 @@ Item {
     // 交互
     // ------------------------------------------------------------------
     function editSlot(row, index) {
-        var raw = filterRaw(row)[index]
+        var shown = shownSlot(row, index)
+        if (!shown) {
+            return
+        }
+        var raw = filterRaw(row)[shown.rowIndex]
         if (raw) {
-            slotEditor.openFor(row, index, raw)
+            slotEditor.openFor(row, shown.rowIndex, raw)
+        }
+    }
+
+    // 界面上第 index 个（解析后）对应的槽位；同时带着它在原始列表里的下标。
+    function shownSlot(row, index) {
+        var shown = filterRow(allSlots, row)
+        return 0 <= index && index < shown.length ? shown[index] : null
+    }
+
+    function moveSlot(row, index, delta) {
+        var shown = shownSlot(row, index)
+        if (shown) {
+            ConfigManager.moveLauncherSlot(row, shown.rowIndex, delta)
         }
     }
 
@@ -262,13 +283,16 @@ Item {
     }
 
     function removeSlot(row, index) {
-        var raw = filterRaw(row)[index]
-        var name = raw ? (raw.label || raw.path || raw.ref || "") : ""
+        var shown = shownSlot(row, index)
+        if (!shown) {
+            return
+        }
+        var name = String(shown.label || shown.name || "")
         confirmRemove.message = name.length > 0
             ? qsTr("确定要从小窗上移除「%1」这一格吗？只会移除这一格，条目本身还在档案里。").arg(name)
             : qsTr("确定要移除这一格吗？")
         confirmRemove.callback = function () {
-            ConfigManager.deleteLauncherSlot(row, index)
+            ConfigManager.deleteLauncherSlot(row, shown.rowIndex)
         }
         confirmRemove.open()
     }

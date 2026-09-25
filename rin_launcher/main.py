@@ -9,17 +9,32 @@ import logging
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = (
+    # 打包后资源都解压在 _MEIPASS（onefile）或 exe 同级（onedir）下，不能再依赖
+    # __file__ 的层级 —— 冻结环境里入口脚本的 __file__ 布局和源码树不一样。
+    Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent.parent
+)
 QML_ENTRY = PROJECT_ROOT / "qml" / "LauncherWindow.qml"
 COMPACT_ENTRY = PROJECT_ROOT / "qml" / "CompactWindow.qml"
 ICON_FILE = PROJECT_ROOT / "assets" / "icon.ico"
+
+# RinUI 启动时会 print 一个带 emoji 的横幅。老终端（cmd.exe 的 GBK 代码页）编码
+# 装不下那个字符时 print 会抛 UnicodeEncodeError，把整个程序带走 —— 这里给两个
+# 流加一层兜底：编不出来的字符用占位符代替，中文输出不受影响。
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(errors="replace")
+        except Exception:  # 流不支持重配置（被其它程序包了一层）时忽略
+            pass
 
 # RinUI is vendored in-tree (MIT), so the package root just has to be importable.
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import RinUI  # noqa: F401  (imported first: it configures HiDPI before Qt starts)
-from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 from RinUI import RinUIWindow  # noqa: E402
 from RinUI.core import BackdropEffect, is_windows  # noqa: E402
@@ -85,7 +100,6 @@ class Launcher:
         """Re-apply the OS-level settings whenever they change in the UI."""
         settings = self.config_manager.config["settings"]
         self.config_manager.hotkeyChanged.connect(self.apply_hotkey)
-        self.config_manager.alwaysOnTopChanged.connect(self.apply_always_on_top)
         self.config_manager.trayEnabledChanged.connect(self.apply_tray)
         self.config_manager.materialChanged.connect(self.apply_material)
         self.config_manager.settingsChanged.connect(self.apply_compact_acrylic)
@@ -166,10 +180,9 @@ class Launcher:
             self.window.engine.rootContext().setContextProperty(
                 "ThemeManager", self.window.theme_manager)
 
-        self.apply_always_on_top(
-            bool(self.config_manager.config["settings"].get("alwaysOnTop", True)))
-        # 桌面挂件：不抢焦点 + 亚克力。材质要在窗口有原生句柄之后再上。
+        # 桌面挂件：沉底、不抢焦点 + 亚克力。材质要在窗口有原生句柄之后再上。
         effects.apply_no_focus_tool_window(root)
+        effects.apply_bottom_layer(root)
         self.apply_compact_acrylic()
         return True
 
@@ -229,23 +242,6 @@ class Launcher:
         except Exception:
             return False
 
-    def apply_always_on_top(self, enabled: bool) -> None:
-        """常驻小窗跟着 settings.alwaysOnTop 走；主窗口保持普通窗口行为。"""
-        if self.compact is None or self.compact.root_window is None:
-            return
-        root = self.compact.root_window
-        flags = root.flags()
-        flags = flags | Qt.WindowStaysOnTopHint if enabled else flags & ~Qt.WindowStaysOnTopHint
-        if flags == root.flags():
-            return
-        was_visible = root.isVisible()
-        root.setFlags(flags)
-        if was_visible:  # changing flags hides the window on some platforms
-            root.show()
-        # setFlags 会重建原生窗口，之前挂上去的扩展样式和材质都得重来一遍。
-        effects.apply_no_focus_tool_window(root)
-        self.apply_compact_acrylic()
-
     def apply_tray(self, enabled: bool) -> None:
         if enabled:
             if self.tray.start():
@@ -270,8 +266,9 @@ class Launcher:
         root = self.compact.root_window
         root.show()
         # 小窗带 WindowDoesNotAcceptFocus，requestActivate() 是无效调用（Qt 会打一条
-        # 警告），置顶靠 WindowStaysOnTopHint，不需要抢前台。
-        root.raise_()
+        # 警告）。置底窗口不能 raise_()（那会把它翻到别的窗口上面），显示完再向
+        # 系统兜一次底，防止刚显示时被抬到前台。
+        effects.apply_bottom_layer(root)
 
     def hide_compact(self) -> None:
         if self.compact is not None and self.compact.root_window is not None:
