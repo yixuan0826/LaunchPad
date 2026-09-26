@@ -26,30 +26,30 @@ FluentWindow {
     // 关闭按钮不直接退出，交给 Python 判断该隐藏（有托盘）还是真退出。
     signal closeRequested()
 
-    readonly property var pageKeys: ({
-        "launcher": 0, "records": 1, "settings": 2, "about": 3
+    // 页面表。左侧导航只放三个常用页；「快捷操作」这种低频入口收进了标题栏
+    // 右上角的「…」菜单（openPage 照样能按名字切过去）。
+    readonly property var pageUrls: ({
+        "launcher": Qt.resolvedUrl("pages/LauncherSettingsPage.qml"),
+        "records": Qt.resolvedUrl("pages/RecordsPage.qml"),
+        "settings": Qt.resolvedUrl("pages/SettingsPage.qml"),
+        "about": Qt.resolvedUrl("pages/AboutPage.qml")
     })
 
     navigationItems: [
         {
             "title": qsTr("启动台"),
             "icon": "ic_fluent_apps_20_regular",
-            "page": Qt.resolvedUrl("pages/LauncherSettingsPage.qml")
-        },
-        {
-            "title": qsTr("档案"),
-            "icon": "ic_fluent_book_20_regular",
-            "page": Qt.resolvedUrl("pages/RecordsPage.qml")
+            "page": pageUrls["launcher"]
         },
         {
             "title": qsTr("设置"),
             "icon": "ic_fluent_settings_20_regular",
-            "page": Qt.resolvedUrl("pages/SettingsPage.qml")
+            "page": pageUrls["settings"]
         },
         {
             "title": qsTr("关于"),
             "icon": "ic_fluent_info_20_regular",
-            "page": Qt.resolvedUrl("pages/AboutPage.qml")
+            "page": pageUrls["about"]
         }
     ]
 
@@ -57,17 +57,76 @@ FluentWindow {
         if (requestedPage.length === 0) {
             return
         }
-        var index = pageKeys[requestedPage]
+        var name = requestedPage
         requestedPage = ""
-        if (index === undefined) {
-            return
+        openPage(name)
+    }
+
+    function openPage(name) {
+        var page = pageUrls[name]
+        if (page !== undefined) {
+            navigationView.safePush(page, false, false)
         }
-        navigationView.safePush(navigationItems[index].page, false, false)
     }
 
     onClosing: function (close) {
         close.accepted = false
         launcherWindow.closeRequested()
+    }
+
+    // ── 标题栏右上角的「…」更多菜单 ──
+    // 按钮挂在标题栏内容区的右端（最小化按钮左边），菜单贴它左下方弹出。
+    Item {
+        id: moreMenuHost
+
+        objectName: "moreMenuHost"
+        parent: launcherWindow.titleBarHost
+        width: 34
+        height: 30
+        anchors.right: parent.right
+        anchors.rightMargin: 6
+        anchors.verticalCenter: parent.verticalCenter
+
+        ToolButton {
+            anchors.fill: parent
+            icon.name: "ic_fluent_more_horizontal_20_regular"
+            ToolTip.text: qsTr("更多")
+            ToolTip.visible: hovered
+            ToolTip.delay: 500
+            onClicked: launcherWindow.popupMoreMenu()
+        }
+    }
+
+    Menu {
+        id: moreMenu
+
+        objectName: "moreMenu"
+        position: Position.None
+
+        MenuItem {
+            text: qsTr("快捷操作…")
+            icon.name: "ic_fluent_flash_20_regular"
+            onTriggered: launcherWindow.openPage("records")
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("重载配置")
+            icon.name: "ic_fluent_arrow_sync_20_regular"
+            onTriggered: ConfigManager.reloadConfig()
+        }
+        MenuItem {
+            text: qsTr("打开配置目录")
+            icon.name: "ic_fluent_folder_open_20_regular"
+            onTriggered: ConfigManager.openConfigFolder()
+        }
+    }
+
+    function popupMoreMenu() {
+        // 场景坐标 → 窗口内容坐标；菜单右缘对齐按钮右缘，贴近右边界时再收回来。
+        var scene = moreMenuHost.mapToItem(null, moreMenuHost.width, moreMenuHost.height + 4)
+        var content = launcherWindow.contentItem
+        var local = content.mapFromItem(null, scene.x, scene.y)
+        moreMenu.popup(Qt.point(Math.max(0, local.x - moreMenu.width), local.y))
     }
 
     // 后端所有提示都走同一条链路，UI 不必自己维护信息条。

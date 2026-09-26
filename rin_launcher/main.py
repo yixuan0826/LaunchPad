@@ -82,7 +82,7 @@ class Launcher:
         self.config_manager = ConfigManager()
         self.config_manager.action_executor = ActionExecutor(self.config_manager)
 
-        # 两个 QML 根：常驻桌面右下角的小窗（启动台本体）和完整窗口（启动台设置 / 档案 / 设置）。
+        # 两个 QML 根：常驻桌面右下角的小窗（启动台本体）和完整窗口（启动台设置 / 快捷操作 / 设置）。
         self.window: RinUIWindow | None = None
         self.compact: RinUIWindow | None = None
         self.tray = TrayIcon(ICON_FILE)
@@ -295,7 +295,7 @@ class Launcher:
             self.window.root_window.hide()
 
     def handle_tray_page(self, page: str) -> None:
-        """托盘菜单里的「启动台」现在指常驻小窗，档案 / 设置才开完整窗口。"""
+        """托盘菜单里的「启动台」现在指常驻小窗，快捷操作 / 设置才开完整窗口。"""
         if page == "launcher":
             self.show_compact()
         else:

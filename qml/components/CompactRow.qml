@@ -2,16 +2,18 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import RinUI
 
-// 小窗的一行：横向铺开若干 CompactTile。
+// 小窗里的一行：横向铺开若干 CompactTile。
 //
-// 槽位数量由用户在设置里定，放得下就居中排，放不下就横向滚 —— 与其把格子越压
-// 越小，滚动更能保住图标的可读性。
+// 面板把两排都交给它渲染（尺寸由面板统一指定）；格子放不下时横向滑，
+// 与其把格子越压越小，滚动更能保住图标的可读性。
 Item {
     id: row
 
     property var slots: []
     property string style: "big"     // big | mini
     property int maxTileSize: 76
+    // 面板给两排指定统一个头；0 = 按格子数自己算。
+    property real tileSizeOverride: 0
 
     signal activated(var slot)
     signal menuRequested(var slot, real sceneX, real sceneY)
@@ -20,6 +22,9 @@ Item {
     readonly property int gap: mini ? 6 : 10
     // 大格子边长跟着宽度走，但有上下限：太少不至于撑成巨块，太多也不会缩成点。
     readonly property real tileSize: {
+        if (tileSizeOverride > 0) {
+            return tileSizeOverride
+        }
         if (slots.length === 0) {
             return maxTileSize
         }

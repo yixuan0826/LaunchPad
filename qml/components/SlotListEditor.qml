@@ -16,11 +16,15 @@ ColumnLayout {
     property string emptyHint: ""
     // 数字序号从 1 开始显示。
     property string unit: qsTr("项")
+    // 上限；0 表示不限。满了以后「添加」会置灰。
+    property int capacity: 0
 
     signal addRequested()
     signal editRequested(int index)
     signal removeRequested(int index)
     signal moveRequested(int index, int delta)
+
+    readonly property bool full: capacity > 0 && slots.length >= capacity
 
     Layout.fillWidth: true
     spacing: 6
@@ -32,8 +36,16 @@ ColumnLayout {
         Text {
             Layout.alignment: Qt.AlignVCenter
             typography: Typography.Caption
-            color: Theme.currentTheme.colors.textSecondaryColor
-            text: qsTr("共 %1 %2").arg(list.slots.length).arg(list.unit)
+            color: list.full
+                ? Theme.currentTheme.colors.systemCautionColor
+                : Theme.currentTheme.colors.textSecondaryColor
+            text: {
+                var base = list.capacity > 0
+                    ? qsTr("共 %1 / %2 %3").arg(list.slots.length).arg(list.capacity).arg(list.unit)
+                    : qsTr("共 %1 %2").arg(list.slots.length).arg(list.unit)
+                // 禁用状态的按钮收不到 hover，提示只能写在文字里。
+                return list.full ? base + qsTr("（已满）") : base
+            }
         }
 
         Item { Layout.fillWidth: true }
@@ -41,6 +53,7 @@ ColumnLayout {
         Button {
             text: qsTr("添加")
             icon.name: "ic_fluent_add_20_regular"
+            enabled: !list.full
             onClicked: list.addRequested()
         }
     }

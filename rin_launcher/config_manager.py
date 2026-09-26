@@ -5,8 +5,8 @@ Owns ``config.yaml`` and exposes it to QML through camelCase ``@Slot`` methods
 there is no separate snake_case layer).
 
 改动只发对应的信号（``launcherChanged`` / ``recordsChanged`` /
-``settingsChanged``），不再一律发 ``configChanged``：小窗、档案页、设置页各自
-只关心一块数据，少一次全量刷新就少一次重复解析与重排。
+``settingsChanged``），不再一律发 ``configChanged``：小窗、快捷操作页、设置页
+各自只关心一块数据，少一次全量刷新就少一次重复解析与重排。
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import yaml
 from PySide6.QtCore import QFileInfo, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 # QFileIconProvider 在 Qt6 里搬到了 QtWidgets（QtGui 那个基类要自己实现 icon()）。
-from PySide6.QtWidgets import QFileDialog, QFileIconProvider
+from PySide6.QtWidgets import QApplication, QFileDialog, QFileIconProvider
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -41,14 +41,19 @@ ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 BUNDLED_ICON_DIR = ASSETS_DIR / "icons" / "lawnicons"
 APP_ICON_FILE = ASSETS_DIR / "icon.png"
 
-# ── 常驻小窗的三行 ──────────────────────────────────────────────────
-# 槽位不再是固定几格：每一行都是一个可增删排序的列表，内容写进 launcher.slots。
-ROW_APPS = 0        # 常用应用（大格子）
-ROW_TOOLS = 1       # 快捷功能（小格子）
-ROW_DISKS = 2       # 存储与磁盘
-LAUNCHER_ROWS = 3
+# ── 常驻小窗的两块 ──────────────────────────────────────────────────
+# 面板：一块「双行」的格子板（最多 PANEL_CAPACITY 格），小窗把它的槽位按行
+# 平分渲染成上下两排；存储区：存储卡片 + 磁盘入口。槽位都写在 launcher.slots。
+ROW_PANEL = 0        # 双行面板
+ROW_STORAGE = 1      # 存储与磁盘
+LAUNCHER_ROWS = 2
+PANEL_CAPACITY = 10  # 面板最多固定几格
 
-SLOT_ACTION = "action"   # 引用「档案」里的条目
+# 行语义随版本变化：<3 的配置里 0/1/2 是老的「常用应用 / 快捷功能 / 存储与
+# 磁盘」，读入时按 ROW_ 常量迁到新模型（见 _normalize）。
+CONFIG_VERSION = 3
+
+SLOT_ACTION = "action"   # 一格完整的动作（程序 / 命令 / 网址 / 键鼠）
 SLOT_TOOL = "tool"       # 内置功能
 SLOT_PATH = "path"       # 打开任意文件 / 文件夹 / 磁盘
 SLOT_USB = "usb"         # 自动检测的可移动磁盘
@@ -58,7 +63,7 @@ SLOT_KINDS: tuple = (SLOT_ACTION, SLOT_TOOL, SLOT_PATH, SLOT_USB)
 # 内置功能。(key, 标题, Fluent 图标名)
 TOOL_CATALOG: tuple = (
     ("launcherPage", "启动台设置", "ic_fluent_apps_20_regular"),
-    ("records", "档案管理", "ic_fluent_book_20_regular"),
+    ("records", "快捷操作", "ic_fluent_flash_20_regular"),
     ("settings", "设置", "ic_fluent_settings_20_regular"),
     ("configFolder", "配置目录", "ic_fluent_folder_open_20_regular"),
     ("configFile", "配置文件", "ic_fluent_document_text_20_regular"),
@@ -75,19 +80,20 @@ TOOL_TITLES: dict[str, str] = {key: title for key, title, _icon in TOOL_CATALOG}
 
 # 槽位 kind 的展示信息，给编辑器的下拉用。
 SLOT_KIND_LABELS: dict[str, str] = {
-    SLOT_ACTION: "档案条目",
+    SLOT_ACTION: "动作",
     SLOT_TOOL: "内置功能",
-    SLOT_PATH: "文件 / 文件夹 / 磁盘",
+    SLOT_PATH: "打开路径",
     SLOT_USB: "可移动磁盘（自动检测）",
 }
 SLOT_KIND_ICONS: dict[str, str] = {
-    SLOT_ACTION: "ic_fluent_apps_20_regular",
+    SLOT_ACTION: "ic_fluent_play_20_regular",
     SLOT_TOOL: "ic_fluent_wrench_20_regular",
     SLOT_PATH: "ic_fluent_folder_open_20_regular",
-    SLOT_USB: "ic_fluent_hard_drive_20_regular",
+    SLOT_USB: "ic_fluent_usb_plug_20_regular",
 }
 
-# 槽位可以内联一份完整动作（不必先进「档案」），取值与条目共用。
+# 槽位不再引用「快捷操作」里的条目：动作直接写在槽位里（内联），「快捷操作」
+# 页只是可复用的库，两边靠复制而不是引用关联。
 ACTION_TYPES: tuple = ("file", "cmd", "url", "keymouse")
 KEYMOUSE_STEP_TYPES: tuple = ("key", "mouse", "wait")
 # 这些后缀是「图片」，走导入；其余（exe/dll/lnk…）走系统图标提取。
@@ -271,6 +277,16 @@ def _new_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
+def _slot_row(item: Any, fallback: int) -> int:
+    """槽位声明的行号；写坏了就退回它在列表里的位置。"""
+    if isinstance(item, dict):
+        try:
+            return int(item.get("row", fallback))
+        except (TypeError, ValueError):
+            pass
+    return fallback
+
+
 def _new_slot(kind: str, row: int, **extra: Any) -> dict[str, Any]:
     """建一个槽位字典；多出来的键补上默认值，保证结构一致。"""
     slot = {
@@ -323,10 +339,11 @@ def _derive_action_name(action: dict[str, Any]) -> str:
 
 
 def _default_slots(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """默认槽位：前 4 个条目 + 6 个内置功能 + 一个 U 盘和一个本机磁盘。"""
-    slots = [_new_slot(SLOT_ACTION, ROW_APPS, ref=action["id"]) for action in actions[:4]]
-    slots += [_new_slot(SLOT_TOOL, ROW_TOOLS, key=key) for key in DEFAULT_TOOL_KEYS]
-    slots.append(_new_slot(SLOT_USB, ROW_DISKS, label="U 盘"))
+    """默认槽位：面板放前 4 个条目 + 6 个内置功能（正好 10 格），存储区放
+    一个 U 盘和一个本机磁盘。"""
+    slots = [_new_slot(SLOT_ACTION, ROW_PANEL, ref=action["id"]) for action in actions[:4]]
+    slots += [_new_slot(SLOT_TOOL, ROW_PANEL, key=key) for key in DEFAULT_TOOL_KEYS]
+    slots.append(_new_slot(SLOT_USB, ROW_STORAGE, label="U 盘"))
 
     # 挑一个非系统盘当默认的「磁盘」项；找不到就用主目录。
     target = ""
@@ -334,7 +351,7 @@ def _default_slots(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if drive["path"].upper() not in ("C:\\", "/"):
             target = drive["path"]
             break
-    slots.append(_new_slot(SLOT_PATH, ROW_DISKS, path=target or str(Path.home())))
+    slots.append(_new_slot(SLOT_PATH, ROW_STORAGE, path=target or str(Path.home())))
     return slots
 
 
@@ -355,7 +372,7 @@ def _default_config() -> dict[str, Any]:
         for name, icon, rank in DEFAULT_CATEGORIES
     ]
     return {
-        "version": 2,
+        "version": CONFIG_VERSION,
         "actions": actions,
         "categories": categories,
         "launcher": {
@@ -398,6 +415,8 @@ class ConfigManager(QObject):
     materialChanged = Signal(str)
     # 页面 / 窗口级的请求：QML 侧的页面够不到窗口对象，统一从这里转给 main.py。
     pageRequested = Signal(str)
+    # 小窗要直接打开某一格的编辑器（row, index；index=-1 表示新增）。
+    slotEditRequested = Signal(int, int)
     previewCompactRequested = Signal()
 
     def __init__(self, config_dir: Path | None = None, parent: QObject | None = None):
@@ -417,6 +436,8 @@ class ConfigManager(QObject):
         self._storage_cache: tuple[float, dict[str, Any]] | None = None
         # 可移动磁盘缓存：枚举驱动器有系统调用成本，刷新时只问一次。
         self._removable_cache: tuple[float, str] | None = None
+        # 小窗发起的「编辑这一格」请求（页面建好前先记着，见 requestSlotEditor）。
+        self._pending_slot_edit: tuple[int, int] | None = None
         self._config = self._load()
 
     @property
@@ -439,39 +460,62 @@ class ConfigManager(QObject):
             return _default_config()
 
     def _normalize(self, data: dict[str, Any]) -> dict[str, Any]:
-        data.setdefault("version", 2)
+        # 版本号决定 launcher 的行语义：<3 是老的「三行」模型（0 常用应用 /
+        # 1 快捷功能 / 2 存储与磁盘），>=3 是「双行面板」模型（0 面板 /
+        # 1 存储与磁盘）。只在读入时迁移一次，下次写盘才落成新版本号。
+        try:
+            version = int(data.get("version") or 1)
+        except (TypeError, ValueError):
+            version = 1
         data.setdefault("actions", [])
         data.setdefault("categories", [])
         # settings keys added by newer builds get their default value
-        data["settings"] = {**DEFAULT_SETTINGS, **(data.get("settings") or {})}
         settings = {**DEFAULT_SETTINGS, **(data.get("settings") or {})}
         # 小窗改成固定置底、固定主屏右下角之后，这两个老键不再有消费方。
         for obsolete in ("alwaysOnTop", "compactPos"):
             settings.pop(obsolete, None)
         data["settings"] = settings
+        # launcher 段必须一起规范化：旧格式迁移、坏槽位剔除、内联动作清洗
+        # 都靠这一句，漏掉它读回来的就是没洗过的原始字典。
+        data["launcher"] = self._normalize_launcher(data, legacy_rows=version < CONFIG_VERSION)
+        data["version"] = CONFIG_VERSION
         return data
 
-    def _normalize_launcher(self, data: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_launcher(self, data: dict[str, Any],
+                            legacy_rows: bool = False) -> dict[str, Any]:
         """把 launcher 段补成合法槽位列表，并兼容旧版（固定 apps/tools）格式。"""
         raw = data.get("launcher") or {}
-        slots = self._migrate_slots(raw, data.get("actions", []))
+        slots = self._migrate_slots(raw, data.get("actions", []), legacy_rows)
         return {
             "slots": [slot for slot in slots if slot["kind"] in SLOT_KINDS],
             "storagePath": str(raw.get("storagePath") or ""),
         }
 
-    def _migrate_slots(self, raw: dict[str, Any], actions: list[dict[str, Any]]) -> list[dict]:
+    def _migrate_slots(self, raw: dict[str, Any], actions: list[dict[str, Any]],
+                       legacy_rows: bool = False) -> list[dict]:
         """产出槽位列表。
 
         ``launcher.slots`` 是新格式；只有 ``apps`` / ``tools`` 的老配置按老结构
         逐格翻译成槽位，空位直接丢掉（新模型里「空位」没有意义）。
+        ``legacy_rows`` 为真时按老的「三行」语义迁移：第一行 + 第二行合并成面板
+        （第一行的内容排前面），第三行变成存储区。
         """
         if isinstance(raw.get("slots"), list) and raw["slots"]:
+            items = list(raw["slots"])
+            if legacy_rows:
+                # 稳定按原行号排序：老配置里第一行（0）的槽位要排在第二行（1）
+                # 前面，合并进面板后顺序才符合用户的直觉。
+                items = [item for _index, item in sorted(
+                    enumerate(items), key=lambda pair: _slot_row(pair[1], pair[0]))]
             slots: list[dict[str, Any]] = []
-            for index, item in enumerate(raw["slots"]):
-                slot = self._normalize_slot(item, index)
+            for index, item in enumerate(items):
+                slot = self._normalize_slot(item, index, legacy_rows)
                 if slot is not None:
                     slots.append(slot)
+            panel_count = sum(1 for slot in slots if slot["row"] == ROW_PANEL)
+            if panel_count > PANEL_CAPACITY:
+                logger.warning("Panel has %d slots, only %d are shown",
+                               panel_count, PANEL_CAPACITY)
             return slots
 
         if not raw:
@@ -482,17 +526,18 @@ class ConfigManager(QObject):
         existing = {action["id"] for action in actions}
         for action_id in raw.get("apps") or []:
             if str(action_id) in existing:
-                migrated.append(_new_slot(SLOT_ACTION, ROW_APPS, ref=str(action_id)))
+                migrated.append(_new_slot(SLOT_ACTION, ROW_PANEL, ref=str(action_id)))
         for key in raw.get("tools") or []:
             if key in TOOL_ICONS:
-                migrated.append(_new_slot(SLOT_TOOL, ROW_TOOLS, key=str(key)))
+                migrated.append(_new_slot(SLOT_TOOL, ROW_PANEL, key=str(key)))
         # 老配置里那个「U 盘」按钮变成独立的 usb 槽位。
-        migrated.append(_new_slot(SLOT_USB, ROW_DISKS, label="U 盘"))
+        migrated.append(_new_slot(SLOT_USB, ROW_STORAGE, label="U 盘"))
         if not migrated:
             return _default_slots(actions)
         return migrated
 
-    def _normalize_slot(self, item: Any, index: int) -> dict[str, Any] | None:
+    def _normalize_slot(self, item: Any, index: int,
+                        legacy_rows: bool = False) -> dict[str, Any] | None:
         """把外部写坏的槽位修回可用状态；实在修不了就丢掉（返回 None）。"""
         if not isinstance(item, dict):
             return None
@@ -500,12 +545,12 @@ class ConfigManager(QObject):
         if kind not in SLOT_KINDS:
             return None
 
-        row = item.get("row", index)
-        try:
-            row = int(row)
-        except (TypeError, ValueError):
-            row = ROW_APPS
-        row = min(max(row, 0), LAUNCHER_ROWS - 1)
+        row = _slot_row(item, index)
+        if legacy_rows:
+            # 老模型 0/1 是两块独立内容，都并进面板；第三行之后归存储区。
+            row = ROW_PANEL if row <= 1 else ROW_STORAGE
+        else:
+            row = ROW_PANEL if row <= ROW_PANEL else ROW_STORAGE
 
         slot = _new_slot(kind, row)
         slot["label"] = str(item.get("label") or "")
@@ -620,7 +665,7 @@ class ConfigManager(QObject):
         if kind == SLOT_ACTION:
             inline = slot.get("action")
             if isinstance(inline, dict) and inline and not slot.get("ref"):
-                # 内联动作：槽位自己就是一份完整定义，不依赖「档案」。
+                # 内联动作：槽位自己就是一份完整定义，不依赖快捷操作库。
                 resolved.update(
                     name=override_label or _derive_action_name(inline),
                     icon=override_icon or "",
@@ -678,7 +723,7 @@ class ConfigManager(QObject):
                 available=bool(drive),
             )
         if resolved.get("inlineAction"):
-            resolved["kindLabel"] = "自定义动作"
+            resolved["kindLabel"] = "动作"
         else:
             resolved["kindLabel"] = SLOT_KIND_LABELS.get(kind, kind)
         return resolved
@@ -892,30 +937,41 @@ class ConfigManager(QObject):
         candidate = Path(target)
         return candidate if candidate.exists() else None
 
-    def _extract_icon_file(self, path: str) -> str:
+    def _extract_icon_file(self, path: str, notify: bool = True) -> str:
         """从程序 / 快捷方式 / DLL 里抽出图标，落成 png 存进图标库。
 
         借用 Qt 的 QFileIconProvider：Windows 上它直接问系统外壳，能拿到 exe 内
         嵌的图标；快捷方式优先跟随目标，拿到的是程序自己的图标而不是带小箭头
         的那张；非 Windows 上会退化成一个通用图标，功能不至于报错消失。
+
+        ``notify=False`` 用于保存槽位时的自动补图标：静默失败，不打扰用户。
         """
+        # 没有 QApplication（裸脚本／无 GUI 环境）时 QFileIconProvider 会直接
+        # 把进程干掉（原生访问冲突，Python 捕不住），先挡一道。
+        if QApplication.instance() is None:
+            logger.warning("No QApplication instance, skipping icon extraction")
+            return ""
         source = self._shortcut_target(path) or Path(path)
         icon = self._icon_provider.icon(QFileInfo(str(source)))
         if icon.isNull():
-            self.showToast.emit("这个文件里没有取到图标", "warning")
+            if notify:
+                self.showToast.emit("这个文件里没有取到图标", "warning")
             return ""
 
         # 取最大的一档，通常在 32~256 之间。
         pixmap = icon.pixmap(256, 256)
         if pixmap.isNull():
-            self.showToast.emit("这个文件里没有取到图标", "warning")
+            if notify:
+                self.showToast.emit("这个文件里没有取到图标", "warning")
             return ""
 
         target = self.icon_dir / f"{_new_id()}.png"
         if not pixmap.save(str(target), "PNG"):
-            self.showToast.emit("图标保存失败", "error")
+            if notify:
+                self.showToast.emit("图标保存失败", "error")
             return ""
-        self.showToast.emit(f"已提取图标：{source.name}", "success")
+        if notify:
+            self.showToast.emit(f"已提取图标：{source.name}", "success")
         return self._icon_key(target)
 
     @Slot(str, result=str)
@@ -992,14 +1048,18 @@ class ConfigManager(QObject):
 
     @Slot(str, result=bool)
     def deleteAction(self, action_id: str) -> bool:
-        self._config["actions"] = [a for a in self._config["actions"] if a["id"] != action_id]
-        # 引用了这个条目的槽位会随之失效（解析时跳过），顺手清掉引用。
-        for slot in self._config["launcher"]["slots"]:
-            if slot["kind"] == SLOT_ACTION and slot.get("ref") == action_id:
-                slot["ref"] = ""
-        saved = self.save(changed="records")
-        self.launcherChanged.emit()   # 小窗上引用了它的那一格也要跟着消失
-        return saved
+        return self.deleteActions([action_id])
+
+    def _drop_slots_referencing(self, ids: set[str]) -> bool:
+        """删掉引用了这些条目的槽位：引用失效后只剩个空壳，留着更让人迷惑。"""
+        slots = self._config["launcher"]["slots"]
+        kept = [
+            slot for slot in slots
+            if not (slot.get("kind") == SLOT_ACTION
+                    and str(slot.get("ref") or "") in ids)
+        ]
+        self._config["launcher"]["slots"] = kept
+        return len(kept) != len(slots)
 
     @Slot("QVariantMap", result=bool)
     def duplicateAction(self, action: dict) -> bool:
@@ -1093,8 +1153,13 @@ class ConfigManager(QObject):
     def _slots(self) -> list[dict[str, Any]]:
         return self._config["launcher"]["slots"]
 
-    def _build_slot(self, kind: str, row: int, payload: dict[str, Any]) -> dict[str, Any]:
-        """按编辑器提交的表单拼一个合法槽位；kind 决定保留哪些字段。"""
+    def _build_slot(self, kind: str, row: int, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """按编辑器提交的表单拼一个合法槽位；kind 决定保留哪些字段。
+
+        拼不出合法槽位时返回 None（调用方拒绝这次写入）。动作槽位必须带自己
+        的完整定义 —— 以前缺内容时会静默换成「第一个条目」，相当于把用户刚
+        填的东西吃掉，所以现在宁可保存失败也不替换。
+        """
         created = _new_slot(kind, row)
         created["label"] = str(payload.get("label") or "")
         created["icon"] = str(payload.get("icon") or "")
@@ -1103,28 +1168,109 @@ class ConfigManager(QObject):
             if inline is not None:
                 created["action"] = inline
             else:
-                created["ref"] = str(payload.get("ref") or "")
-                # 既没引用也没内联动作时，补一个能渲染的默认引用。
-                if not created["ref"]:
-                    created["ref"] = next(
-                        (a["id"] for a in self._config["actions"] if a.get("enabled", True)), "")
+                # 只接受指向现存条目的显式引用（老配置迁移用），不做兜底。
+                ref = str(payload.get("ref") or "")
+                if not ref or not any(a["id"] == ref for a in self._config["actions"]):
+                    return None
+                created["ref"] = ref
         elif kind == SLOT_TOOL:
             key = str(payload.get("key") or "")
-            created["key"] = key if key in TOOL_ICONS else TOOL_CATALOG[0][0]
+            if key not in TOOL_ICONS:
+                return None
+            created["key"] = key
         elif kind == SLOT_PATH:
-            created["path"] = str(payload.get("path") or "")
+            path = str(payload.get("path") or "").strip()
+            if not path:
+                return None
+            created["path"] = path
+
+        # 没指定图标时替程序 / 快捷方式抽一张，省得小窗上全是空白格子。
+        # 抽图标是「顺手好事」，不能因为它失败就毁掉整个保存。
+        try:
+            self._auto_fill_icon(created)
+        except Exception:
+            logger.exception("Auto icon extraction failed for %r", created.get("label"))
         return created
+
+    def _auto_fill_icon(self, slot: dict[str, Any]) -> None:
+        """槽位没图标时，试着从它的目标文件里抽一张（只认程序 / 快捷方式）。"""
+        if slot.get("icon"):
+            return
+        action = slot.get("action") if slot["kind"] == SLOT_ACTION else None
+        if isinstance(action, dict) and action.get("type") == "file":
+            target = str(action.get("target") or "").strip().strip('"')
+        elif slot["kind"] == SLOT_PATH:
+            target = str(slot.get("path") or "")
+        else:
+            return
+        # 带占位符 / 环境变量的目标现在解不出来，抽图标留到下次编辑再说。
+        if not target or "{" in target or "%" in target:
+            return
+        path = Path(target).expanduser()
+        if not path.is_file() or path.suffix.lower() not in (".exe", ".lnk", ".ico"):
+            return
+        key = self._extract_icon_file(str(path), notify=False)
+        if key:
+            slot["icon"] = key
+
+    def _panel_slots(self) -> list[dict[str, Any]]:
+        """面板上的槽位（小窗按行平分渲染成上下两排）。"""
+        return [slot for slot in self._slots() if slot["row"] == ROW_PANEL]
+
+    def _panel_full(self) -> bool:
+        return len(self._panel_slots()) >= PANEL_CAPACITY
+
+    @Slot(result="QVariantMap")
+    def getLauncherPanelUsage(self) -> dict[str, Any]:
+        """面板的容量与占用，给编辑器判断「还能不能再加一格」。"""
+        return {"capacity": PANEL_CAPACITY, "used": len(self._panel_slots())}
 
     @Slot(int, "QVariantMap", result=bool)
     def addLauncherSlot(self, row: int, slot: dict) -> bool:
-        """在某一行末尾追加一个槽位。"""
+        """在面板末尾追加一格（或给存储区加一个入口）。面板满时拒绝并提示。"""
         slot = dict(slot)
         kind = str(slot.get("kind") or SLOT_ACTION)
         if kind not in SLOT_KINDS:
             return False
-        self._slots().append(
-            self._build_slot(kind, min(max(int(row), 0), LAUNCHER_ROWS - 1), slot))
+        row = ROW_PANEL if int(row) <= ROW_PANEL else ROW_STORAGE
+        if row == ROW_PANEL and self._panel_full():
+            self.showToast.emit(f"面板最多放 {PANEL_CAPACITY} 格，先删一格再加。", "warning")
+            return False
+        built = self._build_slot(kind, row, slot)
+        if built is None:
+            return False
+        self._slots().append(built)
         return self.save(changed="launcher")
+
+    @Slot(str, int, result=bool)
+    def addActionToLauncher(self, action_id: str, row: int) -> bool:
+        """把一条快捷操作拷成面板上的一格（拷贝，之后两边各管各的）。"""
+        entry = next((a for a in self._config["actions"] if a["id"] == action_id), None)
+        if entry is None:
+            return False
+        row = ROW_PANEL if int(row) <= ROW_PANEL else ROW_STORAGE
+        if row == ROW_PANEL and self._panel_full():
+            self.showToast.emit(f"面板最多放 {PANEL_CAPACITY} 格，先删一格再加。", "warning")
+            return False
+        built = self._build_slot(SLOT_ACTION, row, {
+            "label": str(entry.get("name") or ""),
+            "icon": str(entry.get("icon") or ""),
+            "action": {
+                "type": entry.get("type", "file"),
+                "target": entry.get("target", ""),
+                "arguments": entry.get("arguments", ""),
+                "working_dir": entry.get("working_dir", ""),
+                "run_as": entry.get("run_as", "user"),
+                "keymouse_steps": entry.get("keymouse_steps") or [],
+            },
+        })
+        if built is None:
+            return False
+        self._slots().append(built)
+        if not self.save(changed="launcher"):
+            return False
+        self.showToast.emit(f"已复制到启动台：{entry.get('name', '')}", "success")
+        return True
 
     @Slot(int, int, "QVariantMap", result=bool)
     def updateLauncherSlot(self, row: int, index: int, slot: dict) -> bool:
@@ -1140,6 +1286,8 @@ class ConfigManager(QObject):
         if kind not in SLOT_KINDS:
             return False
         updated = self._build_slot(kind, int(target.get("row", 0)), slot)
+        if updated is None:
+            return False
         target.clear()
         target.update(updated)
         return self.save(changed="launcher")
@@ -1215,7 +1363,7 @@ class ConfigManager(QObject):
 
     @Slot("QVariantList", bool, result=bool)
     def setActionsEnabled(self, action_ids: list, enabled: bool) -> bool:
-        """批量启停：档案页的多选操作走这里，只写一次盘。"""
+        """批量启停：快捷操作页的多选操作走这里，只写一次盘。"""
         wanted = {str(item) for item in action_ids}
         changed = False
         for action in self._config["actions"]:
@@ -1226,17 +1374,16 @@ class ConfigManager(QObject):
 
     @Slot("QVariantList", result=bool)
     def deleteActions(self, action_ids: list) -> bool:
-        """批量删除，同样是写一次盘。"""
+        """批量删除，同样是写一次盘；引用它们的启动台格子会一起移除。"""
         wanted = {str(item) for item in action_ids}
         if not wanted:
             return True
         self._config["actions"] = [
             a for a in self._config["actions"] if a["id"] not in wanted]
-        for slot in self._config["launcher"]["slots"]:
-            if slot["kind"] == SLOT_ACTION and slot.get("ref") in wanted:
-                slot["ref"] = ""
+        dropped = self._drop_slots_referencing(wanted)
         saved = self.save(changed="records")
-        self.launcherChanged.emit()
+        if dropped:
+            self.launcherChanged.emit()
         return saved
 
     @Slot(result=bool)
@@ -1259,6 +1406,27 @@ class ConfigManager(QObject):
     def requestPage(self, page: str) -> None:
         """QML 页面请求切到某一页（由 main.py 落到完整窗口上）。"""
         self.pageRequested.emit(str(page))
+
+    @Slot(int, int)
+    def requestSlotEditor(self, row: int, index: int) -> None:
+        """小窗右键「编辑这一格 / 再加一格」：切到启动台页并当场打开编辑器。
+
+        ``index`` 为 -1 表示新增。页面可能还没建好，信号发完还留一份待取
+        （takePendingSlotEdit）。
+        """
+        pending = (int(row), int(index))
+        self._pending_slot_edit = pending
+        self.pageRequested.emit("launcher")
+        self.slotEditRequested.emit(*pending)
+
+    @Slot(result="QVariantMap")
+    def takePendingSlotEdit(self) -> dict[str, Any]:
+        """页面姗姗来迟时，把待编辑的槽位取走（读一次就清空）。"""
+        if self._pending_slot_edit is None:
+            return {}
+        row, index = self._pending_slot_edit
+        self._pending_slot_edit = None
+        return {"row": row, "index": index}
 
     @Slot()
     def previewCompact(self) -> None:
@@ -1312,7 +1480,7 @@ class ConfigManager(QObject):
         if kind == SLOT_ACTION:
             inline = slot.get("action")
             if isinstance(inline, dict) and inline and not slot.get("ref"):
-                # 内联动作：不查「档案」，直接把它当成一个动作执行。
+                # 槽位自带完整动作，直接执行，不去查库。
                 if inline.get("type") != "keymouse" \
                         and not str(inline.get("target") or "").strip():
                     self.showToast.emit("这一格还没有配置目标", "warning")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,28 @@ from rin_launcher.elevation import is_admin, run_elevated
 logger = logging.getLogger(__name__)
 
 _URL_SCHEMES = ("http://", "https://", "ftp://", "file://", "mailto:")
+
+
+def _split_args(text: str) -> list[str]:
+    """把参数串拆成参数列表，并保留引号里的空格。
+
+    ``shlex.split(posix=False)`` 在 Windows 上把 ``"a b"`` 当成一个 token，
+    但引号本身会留着，这里再手工剥掉 —— 否则子进程会收到带引号的参数。
+    拆不出来（引号不配对）时退回按空白拆，至少能把程序拉起来。
+    """
+    if not text.strip():
+        return []
+    try:
+        parts = shlex.split(text, posix=False)
+    except ValueError:
+        logger.warning("Unbalanced quotes in arguments %r, splitting naively", text)
+        return text.split()
+    stripped: list[str] = []
+    for part in parts:
+        if len(part) >= 2 and part[0] == part[-1] and part[0] in "\"'":
+            part = part[1:-1]
+        stripped.append(part)
+    return stripped
 
 # Human-friendly key name -> pynput ``Key`` member.  Function keys are generated
 # rather than listed, and single characters are handled before the lookup.
@@ -160,7 +183,7 @@ class ActionExecutor:
             return run_elevated(program, args, cwd)
         try:
             if args:
-                subprocess.Popen([program, *args.split()], cwd=cwd, start_new_session=True)
+                subprocess.Popen([program, *_split_args(args)], cwd=cwd, start_new_session=True)
             elif sys.platform == "win32":
                 os.startfile(program)  # lets the shell apply the file's default verb
             else:

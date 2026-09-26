@@ -64,7 +64,7 @@ Item {
                 Text {
                     typography: Typography.Caption
                     color: Theme.currentTheme.colors.textSecondaryColor
-                    text: qsTr("改动会立即写入配置并生效")
+                    text: qsTr("改完立即生效")
                 }
             }
 
@@ -114,7 +114,7 @@ Item {
 
                     FormRow {
                         label: qsTr("开机自动启动")
-                        description: qsTr("写入注册表 HKCU\\...\\Run（仅 Windows）")
+                        description: qsTr("登录时自动启动（写注册表）")
                         Switch {
                             id: autoStartSwitch
                             checkedText: qsTr("开")
@@ -125,7 +125,7 @@ Item {
 
                     FormRow {
                         label: qsTr("启动时最小化")
-                        description: qsTr("只驻留托盘，小窗也不主动弹出来")
+                        description: qsTr("启动后不弹小窗，只留托盘")
                         Switch {
                             id: startMinimizedSwitch
                             checkedText: qsTr("开")
@@ -136,7 +136,7 @@ Item {
 
                     FormRow {
                         label: qsTr("系统托盘图标")
-                        description: qsTr("关闭后只能靠全局热键唤出小窗")
+                        description: qsTr("关掉后只能用热键唤出小窗")
                         Switch {
                             id: traySwitch
                             checkedText: qsTr("开")
@@ -184,7 +184,7 @@ Item {
 
                     FormRow {
                         label: qsTr("窗口材质")
-                        description: qsTr("默认增强云母；系统不支持时会自动退回云母")
+                        description: qsTr("默认增强云母，不支持时自动回退")
                         ComboBox {
                             id: materialCombo
                             Layout.preferredWidth: 180
@@ -198,7 +198,7 @@ Item {
 
                     FormRow {
                         label: qsTr("小窗亚克力")
-                        description: qsTr("桌面挂件单独走亚克力，比云母更透一些（仅 Windows）")
+                        description: qsTr("小窗单独用亚克力，比云母更透")
                         Switch {
                             id: acrylicSwitch
                             checkedText: qsTr("开")
@@ -209,7 +209,7 @@ Item {
 
                     FormRow {
                         label: qsTr("动画效果")
-                        description: qsTr("关闭后页面切换等过渡会立刻完成")
+                        description: qsTr("关闭后过渡动画立即完成")
                         Switch {
                             id: animationSwitch
                             checkedText: qsTr("开")
@@ -230,12 +230,12 @@ Item {
                         wrapMode: Text.Wrap
                         typography: Typography.Caption
                         color: Theme.currentTheme.colors.textSecondaryColor
-                        text: qsTr("小窗那三行的内容在「启动台」页里配；这里放的是它的行为。")
+                        text: qsTr("面板内容在「启动台」页里配，这里只管行为。")
                     }
 
                     FormRow {
                         label: qsTr("打开面板")
-                        description: qsTr("跳过去调整三行槽位")
+                        description: qsTr("去调整面板格子")
                         Button {
                             text: qsTr("启动台设置")
                             icon.name: "ic_fluent_apps_20_regular"
@@ -245,7 +245,7 @@ Item {
 
                     FormRow {
                         label: qsTr("重新检测")
-                        description: qsTr("磁盘挂载或拔插之后，手动刷一次容量信息")
+                        description: qsTr("插拔磁盘后手动刷新容量")
                         Button {
                             text: qsTr("刷新磁盘")
                             icon.name: "ic_fluent_arrow_sync_20_regular"
@@ -262,7 +262,7 @@ Item {
 
                     FormRow {
                         label: qsTr("显示 / 隐藏")
-                        description: qsTr("全局热键，在任何程序里都能唤出小窗")
+                        description: qsTr("任何程序里都能唤出小窗")
                         HotkeyField {
                             id: hotkeyField
                             Layout.preferredWidth: 260
@@ -283,8 +283,7 @@ Item {
                         wrapMode: Text.Wrap
                         typography: Typography.Caption
                         color: Theme.currentTheme.colors.textSecondaryColor
-                        text: qsTr("必须包含至少一个修饰键（Ctrl / Alt / Shift / Win），"
-                                   + "单独一个普通键会拦截系统里的正常输入。留空即关闭全局热键。")
+                        text: qsTr("必须带一个修饰键（Ctrl / Alt / Shift / Win）；留空关闭热键。")
                     }
                 }
 
@@ -296,7 +295,7 @@ Item {
 
                     FormRow {
                         label: qsTr("自动提权")
-                        description: qsTr("执行标记为管理员的条目时直接弹 UAC")
+                        description: qsTr("管理员格直接弹 UAC")
                         Switch {
                             id: elevateSwitch
                             checkedText: qsTr("开")
@@ -307,7 +306,7 @@ Item {
 
                     FormRow {
                         label: qsTr("提权前确认")
-                        description: qsTr("执行管理员条目之前先弹一次确认")
+                        description: qsTr("提权前先确认一次")
                         Switch {
                             id: confirmAdminSwitch
                             checkedText: qsTr("开")
@@ -318,7 +317,7 @@ Item {
 
                     FormRow {
                         label: qsTr("日志级别")
-                        description: qsTr("重启后生效，日志写在配置目录的 launcher.log")
+                        description: qsTr("重启后生效（配置目录 launcher.log）")
                         ComboBox {
                             id: logCombo
                             Layout.preferredWidth: 180
@@ -361,7 +360,7 @@ Item {
 
                     FormRow {
                         label: qsTr("图标库")
-                        description: qsTr("自己导入的图标与从程序里提取的图标都放这儿")
+                        description: qsTr("导入的图标和从程序提取的图标")
                         RowLayout {
                             spacing: 8
                             Button {
@@ -374,7 +373,7 @@ Item {
 
                     FormRow {
                         label: qsTr("以管理员重启")
-                        description: qsTr("重启后托盘会消失，除非托盘进程也在管理员会话里")
+                        description: qsTr("以管理员身份重启（托盘可能消失）")
                         Button {
                             text: qsTr("立即重启")
                             icon.name: "ic_fluent_shield_20_regular"
@@ -384,7 +383,7 @@ Item {
 
                     FormRow {
                         label: qsTr("恢复默认")
-                        description: qsTr("重置全部分区、条目、槽位与设置，且不可撤销")
+                        description: qsTr("重置全部配置，不可撤销")
                         Button {
                             text: qsTr("重置")
                             icon.name: "ic_fluent_arrow_reset_20_regular"
@@ -402,7 +401,7 @@ Item {
 
                     FormRow {
                         label: qsTr("Rin Launcher")
-                        description: qsTr("版本 1.0.0 · 基于 RinUI（PySide6 + QML）")
+                        description: qsTr("基于 RinUI（PySide6 + QML）")
                         Button {
                             text: qsTr("打开关于页")
                             icon.name: "ic_fluent_info_20_regular"
@@ -483,6 +482,11 @@ Item {
 
     function flush() {
         if (Object.keys(pending).length === 0) {
+            return
+        }
+        // 页面销毁 / 程序退出时定时器可能还欠着一拍，此时上下文已经开始拆了，
+        // 拿不到 ConfigManager。丢掉这最后一拍没有副作用：下次进来还会重读配置。
+        if (!ConfigManager) {
             return
         }
         var payload = pending

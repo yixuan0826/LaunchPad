@@ -4,15 +4,12 @@ import QtQuick.Layouts 2.15
 import RinUI
 
 import "../components"
-import "../dialogs"
 
-// 档案。
+// 快捷操作。
 //
-// 左边分区、右边条目，交互照 ClassIsland 那种「可增删排序的列表」来：
-//   * 每个分区行自带 排序 / 编辑 / 删除，不必先选中再去别处找按钮；
-//   * 条目行可以勾选，顶部工具条能一次性启停或删除；
-//   * 点行即编辑，右侧那一排按钮是给鼠标更快的人用的。
-// 启动台只读，所有写入都发生在这里。
+// 只读的模板库：左边分区、右边条目，这里只负责「看」和「复制到启动台」——
+// 条目的创建和编辑已经合进启动台（每一格都能改动作、名称和图标），复制过去
+// 以后两边各管各的。页面入口收在完整窗口标题栏右上角的「…」菜单里。
 Item {
     id: recordsPage
 
@@ -20,20 +17,6 @@ Item {
     property var entries: []
     property string selectedCategory: ""
     property string query: ""
-    // 勾选的条目 id；检索条件变了也不会自动清空，批量操作才连得上。
-    property var checked: []
-
-    CategoryEditorDialog {
-        id: categoryEditor
-    }
-
-    EntryEditorDialog {
-        id: entryEditor
-    }
-
-    ConfirmDialog {
-        id: confirmDialog
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -54,38 +37,16 @@ Item {
                     font.bold: true
                     font.pixelSize: Theme.currentTheme.typography.bodySize + 4
                     color: Theme.currentTheme.colors.textColor
-                    text: qsTr("档案")
+                    text: qsTr("快捷操作")
                 }
                 Text {
                     typography: Typography.Caption
                     color: Theme.currentTheme.colors.textSecondaryColor
-                    text: qsTr("管理分区与条目，启动台第一行的候选项就是这里的条目")
+                    text: qsTr("只读模板库：复制到启动台，之后各管各的")
                 }
             }
 
             Item { Layout.fillWidth: true }
-
-            Button {
-                text: qsTr("导入")
-                icon.name: "ic_fluent_arrow_import_20_regular"
-                onClicked: ConfigManager.importConfig()
-            }
-            Button {
-                text: qsTr("导出")
-                icon.name: "ic_fluent_arrow_export_20_regular"
-                onClicked: ConfigManager.exportConfig()
-            }
-            Button {
-                text: qsTr("新建分区")
-                icon.name: "ic_fluent_folder_add_20_regular"
-                onClicked: categoryEditor.newCategory()
-            }
-            Button {
-                text: qsTr("新建条目")
-                icon.name: "ic_fluent_add_20_regular"
-                highlighted: true
-                onClicked: entryEditor.newEntry(recordsPage.selectedCategory)
-            }
         }
 
         RowLayout {
@@ -156,9 +117,6 @@ Item {
 
                                 ColumnLayout {
                                     Layout.fillWidth: true
-                                    // 四个按钮是固定宽度，名字列不给个下限就会被压成
-                                    // 一个字一行（RinUI 的 Text 默认是 WordWrap）。
-                                    Layout.minimumWidth: 64
                                     spacing: 0
 
                                     Text {
@@ -179,35 +137,10 @@ Item {
                                             .arg(modelData.order)
                                     }
                                 }
-
-                                MiniIconButton {
-                                    iconName: "ic_fluent_arrow_up_20_regular"
-                                    tip: qsTr("上移")
-                                    enabled: index > 0
-                                    onClicked: ConfigManager.moveCategory(modelData.id, -1)
-                                }
-                                MiniIconButton {
-                                    iconName: "ic_fluent_arrow_down_20_regular"
-                                    tip: qsTr("下移")
-                                    enabled: index < recordsPage.categories.length - 1
-                                    onClicked: ConfigManager.moveCategory(modelData.id, 1)
-                                }
-                                MiniIconButton {
-                                    iconName: "ic_fluent_edit_20_regular"
-                                    tip: qsTr("编辑分区")
-                                    onClicked: categoryEditor.editCategory(modelData)
-                                }
-                                MiniIconButton {
-                                    iconName: "ic_fluent_delete_20_regular"
-                                    tip: qsTr("删除分区")
-                                    danger: true
-                                    onClicked: recordsPage.confirmDeleteCategory(modelData)
-                                }
                             }
 
                             MouseArea {
                                 anchors.fill: parent
-                                anchors.rightMargin: 140   // 让出右侧四个按钮
                                 onClicked: recordsPage.selectCategory(modelData.name)
                             }
                         }
@@ -237,7 +170,7 @@ Item {
                             color: Theme.currentTheme.colors.textColor
                             text: recordsPage.selectedCategory.length > 0
                                 ? recordsPage.selectedCategory
-                                : qsTr("全部条目")
+                                : qsTr("全部操作")
                         }
                         Text {
                             Layout.alignment: Qt.AlignVCenter
@@ -249,48 +182,10 @@ Item {
                         TextField {
                             Layout.fillWidth: true
                             Layout.maximumWidth: 240
-                            placeholderText: qsTr("过滤条目…")
+                            placeholderText: qsTr("过滤操作…")
                             onTextChanged: recordsPage.query = text
                         }
 
-                        Item { Layout.fillWidth: true }
-
-                        CheckBox {
-                            id: selectAllBox
-                            text: qsTr("全选")
-                            enabled: recordsPage.entries.length > 0
-                            onClicked: recordsPage.toggleAll(checked)
-                        }
-                    }
-
-                    // 批量操作条：没有勾选时就整行收起，不占高度。
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: recordsPage.checked.length > 0 ? 32 : 0
-                        visible: recordsPage.checked.length > 0
-                        spacing: 8
-
-                        Text {
-                            Layout.alignment: Qt.AlignVCenter
-                            typography: Typography.Caption
-                            color: Theme.currentTheme.colors.textSecondaryColor
-                            text: qsTr("已选 %1 项").arg(recordsPage.checked.length)
-                        }
-                        Button {
-                            text: qsTr("启用")
-                            icon.name: "ic_fluent_checkmark_circle_20_regular"
-                            onClicked: ConfigManager.setActionsEnabled(recordsPage.checked, true)
-                        }
-                        Button {
-                            text: qsTr("停用")
-                            icon.name: "ic_fluent_eye_off_20_regular"
-                            onClicked: ConfigManager.setActionsEnabled(recordsPage.checked, false)
-                        }
-                        Button {
-                            text: qsTr("删除")
-                            icon.name: "ic_fluent_delete_20_regular"
-                            onClicked: recordsPage.confirmDeleteChecked()
-                        }
                         Item { Layout.fillWidth: true }
                     }
 
@@ -305,25 +200,15 @@ Item {
                         delegate: Frame {
                             id: entryRow
 
-                            readonly property bool marked: recordsPage.isChecked(modelData.id)
-
                             width: entryList.width
                             implicitHeight: 64
-                            color: marked
-                                ? Theme.currentTheme.colors.subtleSecondaryColor
-                                : Theme.currentTheme.colors.cardColor
+                            color: Theme.currentTheme.colors.cardColor
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 10
+                                anchors.leftMargin: 14
                                 anchors.rightMargin: 12
                                 spacing: 10
-
-                                CheckBox {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    checked: entryRow.marked
-                                    onClicked: recordsPage.toggleChecked(modelData.id, checked)
-                                }
 
                                 AppIcon {
                                     Layout.alignment: Qt.AlignVCenter
@@ -350,7 +235,7 @@ Item {
                                             color: Theme.currentTheme.colors.textColor
                                             text: modelData.name
                                         }
-                                        // 停用的条目在启动台上会消失，这里标出来免得找不着。
+                                        // 停用的操作不会被执行，这里标出来免得找不着。
                                         Text {
                                             visible: modelData.enabled === false
                                             typography: Typography.Caption
@@ -375,57 +260,15 @@ Item {
                                 }
 
                                 RowLayout {
+                                    Layout.alignment: Qt.AlignVCenter
                                     spacing: 4
 
-                                    Switch {
-                                        id: enableSwitch
-                                        // 建卡时的首次赋值不该写盘，只有用户拨动才算修改。
-                                        property bool ready: false
-                                        checked: modelData.enabled !== false
-                                        checkedText: ""
-                                        uncheckedText: ""
-                                        onCheckedChanged: {
-                                            if (ready) {
-                                                ConfigManager.toggleAction(modelData.id, checked)
-                                            }
-                                        }
-                                        Component.onCompleted: ready = true
-                                    }
                                     MiniIconButton {
-                                        iconName: "ic_fluent_arrow_up_20_regular"
-                                        tip: qsTr("上移")
-                                        onClicked: ConfigManager.moveAction(modelData.id, -1)
-                                    }
-                                    MiniIconButton {
-                                        iconName: "ic_fluent_arrow_down_20_regular"
-                                        tip: qsTr("下移")
-                                        onClicked: ConfigManager.moveAction(modelData.id, 1)
-                                    }
-                                    MiniIconButton {
-                                        iconName: "ic_fluent_edit_20_regular"
-                                        tip: qsTr("编辑")
-                                        onClicked: entryEditor.editEntry(modelData)
-                                    }
-                                    MiniIconButton {
-                                        iconName: "ic_fluent_copy_20_regular"
-                                        tip: qsTr("复制一份")
-                                        onClicked: ConfigManager.duplicateAction(modelData)
-                                    }
-                                    MiniIconButton {
-                                        iconName: "ic_fluent_delete_20_regular"
-                                        tip: qsTr("删除")
-                                        danger: true
-                                        onClicked: recordsPage.confirmDeleteEntry(modelData)
+                                        iconName: "ic_fluent_dock_row_20_regular"
+                                        tip: qsTr("复制到启动台")
+                                        onClicked: recordsPage.copyToLauncher(modelData)
                                     }
                                 }
-                            }
-
-                            // 点空白处进编辑器；按钮与开关各自吃掉自己的点击。
-                            MouseArea {
-                                anchors.fill: parent
-                                anchors.leftMargin: 40
-                                anchors.rightMargin: 200
-                                onClicked: entryEditor.editEntry(modelData)
                             }
                         }
                     }
@@ -438,8 +281,8 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                         wrapMode: Text.Wrap
                         color: Theme.currentTheme.colors.textSecondaryColor
-                        text: qsTr("这里还没有条目。点右上角「新建条目」加一个，"
-                                   + "它就会出现在启动台的候选列表里。")
+                        text: qsTr("这里还没有操作。导入配置或恢复默认后会出现在这里，"
+                                   + "点行尾的按钮就能复制到启动台。")
                     }
                 }
             }
@@ -529,50 +372,8 @@ Item {
         refreshEntries()
     }
 
-    function isChecked(actionId) {
-        return checked.indexOf(actionId) !== -1
-    }
-
-    function toggleChecked(actionId, wanted) {
-        var next = checked.slice()
-        var at = next.indexOf(actionId)
-        if (wanted && at === -1) {
-            next.push(actionId)
-        } else if (!wanted && at !== -1) {
-            next.splice(at, 1)
-        }
-        checked = next
-    }
-
-    function toggleAll(wanted) {
-        if (!wanted) {
-            checked = []
-            return
-        }
-        var next = []
-        for (var i = 0; i < entries.length; ++i) {
-            next.push(entries[i].id)
-        }
-        checked = next
-    }
-
-    function confirmDeleteEntry(entry) {
-        confirmDialog.ask(qsTr("确定要删除条目“%1”吗？此操作不可撤销。").arg(entry.name),
-                          function () { ConfigManager.deleteAction(entry.id) })
-    }
-
-    function confirmDeleteChecked() {
-        var ids = checked.slice()
-        confirmDialog.ask(qsTr("确定要删除选中的 %1 个条目吗？此操作不可撤销。").arg(ids.length),
-                          function () {
-                              ConfigManager.deleteActions(ids)
-                              recordsPage.checked = []
-                          })
-    }
-
-    function confirmDeleteCategory(category) {
-        confirmDialog.ask(
-            qsTr("确定要删除分区“%1”吗？该分区下的条目会被移动到“默认”分区。").arg(category.name),
-            function () { ConfigManager.deleteCategory(category.id) })
+    // 行尾按钮：拷一份到启动台面板（两边从此各管各的）。
+    function copyToLauncher(entry) {
+        ConfigManager.addActionToLauncher(entry.id, 0)
     }
 }

@@ -5,8 +5,9 @@ import RinUI
 
 // 动作参数表单：类型 / 目标 / 参数 / 工作目录 / 管理员，以及键鼠序列编辑器。
 //
-// 「档案」条目编辑器和槽位的内联动作编辑器共用这一份 —— 之前字段与校验两边各写
-// 一套，改一处漏一处。外部用 load() 灌入初始值、read() 取回一个动作对象。
+// 启动台格子编辑器（动作类）用这一份 —— 之前「快捷操作」和槽位两边各写一套
+// 字段与校验，改一处漏一处；库那边改只读后只剩这一处消费方。
+// 外部用 load() 灌入初始值、read() 取回一个动作对象。
 ColumnLayout {
     id: form
 
@@ -45,7 +46,11 @@ ColumnLayout {
 
     // 保存前的校验；没问题时返回空串。
     function validate() {
-        if (actionType !== "keymouse" && targetField.text.trim().length === 0) {
+        if (actionType === "keymouse") {
+            // 一步都没有的键鼠动作点了也不会发生任何事，不如现在就拦住。
+            return steps.length > 0 ? "" : qsTr("键鼠动作还一步都没有，先在下面添加一条步骤")
+        }
+        if (targetField.text.trim().length === 0) {
             return qsTr("请先填写动作目标")
         }
         return ""

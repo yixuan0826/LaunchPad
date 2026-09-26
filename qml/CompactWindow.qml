@@ -12,8 +12,9 @@ import "components"
 
 // 常驻桌面右下角的启动台小窗。
 //
-// 三行都是可增删排序的槽位（在完整窗口的「启动台」页里配）：
-//   第一行 常用应用 / 第二行 快捷功能 / 第三行 存储位置 + 磁盘入口
+// 两块内容（都在完整窗口的「启动台」页里配）：
+//   面板：最多 10 格的双行格子板（≤ 5 格一排，更多时平分两排）
+//   存储区：存储卡片 + 磁盘入口
 // 窗口是「沉底」的桌面挂件：无边框、不抢焦点、不进任务栏，也不盖在别的窗口
 // 之上 —— 它贴在主显示器右下角，被普通窗口盖住，像桌面上的一块部件。
 // 高度固定为桌面可用高度的一半（见 rin_launcher/effects.py）。
@@ -42,8 +43,7 @@ Window {
     property bool acrylicActive: false
 
     // ── 状态 ──
-    property var appSlots: []
-    property var toolSlots: []
+    property var panelSlots: []
     property var storageSlots: []
     property var storage: ({})
 
@@ -124,28 +124,14 @@ Window {
                 }
             }
 
-            // ── 第一行：常用应用 ──
-            CompactRow {
-                id: appRow
-                objectName: "appRow"
+            // ── 面板：双行格子板（最多 10 格） ──
+            CompactPanel {
+                id: panel
+                objectName: "panel"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumHeight: 84
-                slots: compact.appSlots
-                style: "big"
-                maxTileSize: 76
-                onActivated: compact.runSlot(slot)
-                onMenuRequested: compact.showSlotMenu(slot, sceneX, sceneY)
-            }
-
-            // ── 第二行：快捷功能 ──
-            CompactRow {
-                id: toolRow
-                objectName: "toolRow"
-                Layout.fillWidth: true
-                Layout.preferredHeight: 58
-                slots: compact.toolSlots
-                style: "mini"
+                Layout.minimumHeight: 104
+                slots: compact.panelSlots
                 onActivated: compact.runSlot(slot)
                 onMenuRequested: compact.showSlotMenu(slot, sceneX, sceneY)
             }
@@ -356,8 +342,8 @@ Window {
                 }
 
                 ToolButton {
-                    icon.name: "ic_fluent_book_20_regular"
-                    ToolTip.text: qsTr("档案")
+                    icon.name: "ic_fluent_flash_20_regular"
+                    ToolTip.text: qsTr("快捷操作")
                     onClicked: compact.openMain("records")
                 }
 
@@ -451,12 +437,13 @@ Window {
         MenuItem {
             text: qsTr("编辑这一格…")
             icon.name: "ic_fluent_edit_20_regular"
-            onTriggered: compact.openMain("launcher")
+            enabled: !!slotMenu.slot
+            onTriggered: compact.editSlot(slotMenu.slot)
         }
         MenuItem {
             text: qsTr("再加一格…")
             icon.name: "ic_fluent_add_20_regular"
-            onTriggered: compact.openMain("launcher")
+            onTriggered: compact.addSlotToRow(slotMenu.slot)
         }
     }
 
@@ -471,8 +458,8 @@ Window {
             onTriggered: compact.openMain("launcher")
         }
         MenuItem {
-            text: qsTr("档案管理…")
-            icon.name: "ic_fluent_book_20_regular"
+            text: qsTr("快捷操作…")
+            icon.name: "ic_fluent_flash_20_regular"
             onTriggered: compact.openMain("records")
         }
         MenuItem {
@@ -526,11 +513,10 @@ Window {
     // 数据
     // ------------------------------------------------------------------
     function reload() {
-        // 一次取回全部槽位再按行分 —— 重复调用 getLauncherSlots() 会重复解析。
+        // 一次取回全部槽位再按块分 —— 重复调用 getLauncherSlots() 会重复解析。
         var slots = ConfigManager.getLauncherSlots()
-        appSlots = filterRow(slots, 0)
-        toolSlots = filterRow(slots, 1)
-        storageSlots = filterRow(slots, 2)
+        panelSlots = filterRow(slots, 0)
+        storageSlots = filterRow(slots, 1)
         storage = ConfigManager.getStorageInfo()
     }
 
@@ -557,8 +543,8 @@ Window {
         if (!slot || slot.kind !== "action") {
             return
         }
-        // 把解析出来的完整动作字段带过去：内联动作与档案条目都可能带参数 /
-        // 工作目录 / 键鼠序列，缺了会执行出不一样的结果。
+        // 把解析出来的完整动作字段带过去（类型 / 目标 / 参数 / 工作目录 / 键鼠
+        // 序列），缺了会执行出不一样的结果。
         var payload = {
             "id": slot.ref || "",
             "name": slot.name,
@@ -611,6 +597,17 @@ Window {
     // 小窗是独立的 QML 根，够不到完整窗口，跨窗口的请求统一走信号交给 Python。
     function openMain(page) {
         compact.openMainRequested(page)
+    }
+
+    // 右键菜单的编辑入口：切到启动台页并当场打开这一格的编辑器。
+    function editSlot(slot) {
+        if (slot) {
+            ConfigManager.requestSlotEditor(slot.row, slot.rowIndex)
+        }
+    }
+
+    function addSlotToRow(slot) {
+        ConfigManager.requestSlotEditor(slot ? slot.row : 0, -1)
     }
 
     function showSlotMenu(slot, sceneX, sceneY) {

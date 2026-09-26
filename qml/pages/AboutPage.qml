@@ -120,7 +120,7 @@ Item {
                                 wrapMode: Text.Wrap
                                 color: Theme.currentTheme.colors.textSecondaryColor
                                 text: qsTr("常驻桌面右下角的启动台小窗 + 一个把东西管起来的完整窗口："
-                                           + "三行槽位随手点，档案页负责整理，图标可以自己导入。")
+                                           + "面板格子随手点，内容在启动台里直接编辑，图标可以自己导入。")
                             }
 
                             RowLayout {

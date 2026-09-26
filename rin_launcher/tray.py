@@ -88,7 +88,7 @@ class TrayIcon(QObject):
         launcher.triggered.connect(lambda: self.openPageRequested.emit("launcher"))
         menu.addAction(launcher)
 
-        records = QAction("档案", menu)
+        records = QAction("快捷操作", menu)
         records.triggered.connect(lambda: self.openPageRequested.emit("records"))
         menu.addAction(records)
 

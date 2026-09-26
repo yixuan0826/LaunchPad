@@ -5,12 +5,14 @@ import RinUI
 
 import "../components"
 
-// 启动台槽位编辑器：加一格 / 改一格。
+// 启动台格子编辑器：加一格 / 改一格。
 //
 // 槽位有四种，表单里只显示与当前类型相关的那几行 —— 与其把所有字段都摆出来再
-// 灰掉，不如按类型换表单，少一层判断也少一处看走眼的机会。
-// 「动作」类槽位有两种来源：引用「档案」里的条目（默认），或者直接在这里把
-// 动作写全（内联动作，不需要先建条目）。
+// 灰掉，不如按类型换表单，少一层判断也少一处看走眼的机会。整个表单可滚动：
+// 键鼠序列这种越加越长的字段不会再把 footer 挤出卡片。
+// 动作类槽位是「自带完整定义」的：类型 / 目标 / 参数 / 工作目录 / 管理员 /
+// 键鼠序列全写在这一格里，和快捷操作库不保持关联；库里的内容可以用「从快捷
+// 操作填入」拷进来，拷完两边各管各的。
 AppDialog {
     id: editor
 
@@ -20,25 +22,28 @@ AppDialog {
 
     // ── 表单状态 ──
     property string kind: "action"
-    property string actionSource: "archive"   // archive | custom
-    property string ref: ""
+    property string ref: ""        // 老配置里的库引用，打开时会被拷进表单
     property string toolKey: ""
     property string path: ""
     property string label: ""
     property string iconKey: ""
 
     // 下拉的模型与后端取值
-    property var actionNames: []
-    property var actionIds: []
+    property var libraryNames: []
+    property var libraryActions: []
     property var toolNames: []
     property var toolKeys: []
     property var drives: []
 
+    readonly property var libraryModel: libraryNames.length > 0
+        ? [qsTr("（从库里挑一条填入）")].concat(libraryNames)
+        : [qsTr("（快捷操作库还是空的）")]
+
     signal saved()
 
-    title: index < 0 ? qsTr("添加槽位") : qsTr("编辑槽位")
+    title: index < 0 ? qsTr("添加一格") : qsTr("编辑这一格")
     preferredWidth: 620
-    preferredHeight: 560
+    preferredHeight: 600
     // 表单里有没保存的改动，点遮罩别把输入丢掉。
     closeOnScrim: false
 
@@ -52,7 +57,25 @@ AppDialog {
 
     ColumnLayout {
         Layout.fillWidth: true
+        Layout.fillHeight: true
         spacing: 10
+
+        // 表单放进 Flickable：字段多（尤其是键鼠序列）时内容会比卡片高，
+        // 没有滚动的话底部几行和 footer 会被挤出卡片外面。
+        Flickable {
+            id: formScroller
+            objectName: "slotFormScroller"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            contentWidth: width
+            contentHeight: formColumn.implicitHeight + 6
+            ScrollBar.vertical: ScrollBar {}
+
+            ColumnLayout {
+                id: formColumn
+                width: formScroller.width
+                spacing: 10
 
         // ── 预览 ──
         Frame {
@@ -99,11 +122,18 @@ AppDialog {
         FormRow {
             label: qsTr("类型")
             description: qsTr("决定这一格点了之后干什么")
+            // 跟着选择走的指示图标：一眼能看出当前是哪类格子。
+            AppIcon {
+                Layout.alignment: Qt.AlignVCenter
+                iconKey: editor.kindIcon
+                iconSize: 20
+                tint: Theme.currentTheme.colors.primaryColor
+            }
             ComboBox {
                 Layout.fillWidth: true
                 Layout.maximumWidth: 300
-                model: [qsTr("动作（档案条目 / 自定义）"), qsTr("内置功能"),
-                        qsTr("文件 / 文件夹 / 磁盘"), qsTr("可移动磁盘（自动检测）")]
+                model: [qsTr("动作（程序 / 命令 / 网址 / 键鼠）"), qsTr("内置功能"),
+                        qsTr("打开路径（文件 / 文件夹 / 磁盘）"), qsTr("可移动磁盘（自动检测）")]
                 currentIndex: editor.kindIndex
                 function onActivated(index) {
                     editor.kind = editor.indexOfKind(index)
@@ -111,49 +141,33 @@ AppDialog {
             }
         }
 
-        // ── 动作来源：档案条目 / 自定义动作 ──
+        // ── 从快捷操作填入：拷贝一份内容，拷完两边各管各的 ──
         FormRow {
             visible: editor.kind === "action"
-            label: qsTr("来源")
-            description: qsTr("引用档案里的条目，或直接在这里把动作写全")
+            label: qsTr("快捷操作")
+            description: qsTr("从库里拷一条填进来（不保持关联）")
             ComboBox {
+                id: libraryCombo
                 Layout.fillWidth: true
                 Layout.maximumWidth: 320
-                model: [qsTr("档案条目"), qsTr("自定义动作")]
-                currentIndex: editor.actionSource === "custom" ? 1 : 0
+                model: editor.libraryModel
                 function onActivated(index) {
-                    editor.actionSource = index === 1 ? "custom" : "archive"
+                    editor.fillFromLibrary(index)
                 }
             }
         }
 
-        // ── 档案条目 ──
-        FormRow {
-            visible: editor.kind === "action" && editor.actionSource === "archive"
-            label: qsTr("条目")
-            description: qsTr("候选来自「档案」页")
-            ComboBox {
-                Layout.fillWidth: true
-                Layout.maximumWidth: 320
-                model: editor.actionNames
-                currentIndex: Math.max(0, editor.actionIds.indexOf(editor.ref))
-                function onActivated(index) {
-                    editor.ref = editor.actionIds[index] || ""
-                }
-            }
-        }
-
-        // ── 自定义动作：槽位自带完整定义，不必先进「档案」──
+        // ── 动作字段：这一格自带完整定义，不依赖快捷操作库 ──
         ActionForm {
             id: inlineAction
-            visible: editor.kind === "action" && editor.actionSource === "custom"
+            visible: editor.kind === "action"
         }
 
         // ── 内置功能 ──
         FormRow {
             visible: editor.kind === "tool"
             label: qsTr("功能")
-            description: qsTr("小窗自带的操作")
+            description: qsTr("小窗自带的功能")
             ComboBox {
                 Layout.fillWidth: true
                 Layout.maximumWidth: 320
@@ -220,7 +234,7 @@ AppDialog {
                 wrapMode: Text.Wrap
                 typography: Typography.Caption
                 color: Theme.currentTheme.colors.textSecondaryColor
-                text: qsTr("插上 U 盘 / 移动硬盘后自动识别第一个，不需要指定盘符。")
+                text: qsTr("插上 U 盘 / 移动硬盘后自动识别第一个，不用指定盘符。")
             }
         }
 
@@ -240,7 +254,7 @@ AppDialog {
             label: qsTr("图标")
             description: qsTr("留空就用目标自己的图标")
             ToolButton {
-                icon.name: "ic_fluent_apps_add_in_20_regular"
+                icon.name: "ic_fluent_icons_20_regular"
                 ToolTip.text: qsTr("从图标库中选择")
                 onClicked: {
                     iconPicker.current = editor.iconKey
@@ -248,7 +262,7 @@ AppDialog {
                 }
             }
             ToolButton {
-                icon.name: "ic_fluent_arrow_download_20_regular"
+                icon.name: "ic_fluent_image_add_20_regular"
                 ToolTip.text: qsTr("从文件获取图标（程序 / 快捷方式 / 图片）")
                 onClicked: {
                     iconPicker.current = editor.iconKey
@@ -276,6 +290,8 @@ AppDialog {
                 onClicked: editor.iconKey = ""
             }
         }
+            }
+        }
     }
 
     footer: RowLayout {
@@ -300,6 +316,13 @@ AppDialog {
     // ------------------------------------------------------------------
     readonly property var kindOrder: ["action", "tool", "path", "usb"]
     readonly property int kindIndex: Math.max(0, kindOrder.indexOf(kind))
+    // 类型指示图标：动作 = 运行、功能 = 扳手、路径 = 文件夹、磁盘 = U 盘。
+    readonly property string kindIcon: ({
+        "action": "ic_fluent_play_20_regular",
+        "tool": "ic_fluent_wrench_20_regular",
+        "path": "ic_fluent_folder_open_20_regular",
+        "usb": "ic_fluent_usb_plug_20_regular"
+    })[kind] || "ic_fluent_play_20_regular"
 
     readonly property var driveLabels: drives.map(function (item) {
         return item.total.length > 0
@@ -316,11 +339,7 @@ AppDialog {
             return label
         }
         if (kind === "action") {
-            if (actionSource === "custom") {
-                return editor.deriveActionName()
-            }
-            var at = actionIds.indexOf(ref)
-            return at >= 0 ? actionNames[at] : qsTr("未选择条目")
+            return editor.deriveActionName()
         }
         if (kind === "tool") {
             var ti = toolKeys.indexOf(toolKey)
@@ -350,9 +369,7 @@ AppDialog {
 
     readonly property string previewDetail: {
         if (kind === "action") {
-            return actionSource === "custom"
-                ? qsTr("自定义动作 · 直接写在这一格里")
-                : qsTr("档案条目 · 候选来自档案页")
+            return qsTr("动作 · 由这一格自己定义")
         }
         if (kind === "tool") {
             return qsTr("内置功能")
@@ -365,7 +382,7 @@ AppDialog {
 
     readonly property string previewIcon: {
         if (kind === "action") {
-            return "ic_fluent_apps_20_regular"
+            return "ic_fluent_play_20_regular"
         }
         if (kind === "tool") {
             return "ic_fluent_wrench_20_regular"
@@ -390,33 +407,74 @@ AppDialog {
         path = slot.path || ""
         label = slot.label || ""
         iconKey = slot.icon || ""
-        // 内联动作与条目引用二选一；两者都写过时按后端的口径以 ref 为准。
-        actionSource = (slot.action && !slot.ref) ? "custom" : "archive"
-        inlineAction.load(slot.action || {})
 
-        // 候选每次都重取：档案可能刚改过。
-        var actions = ConfigManager.getActions()
-        actionNames = actions.map(function (item) { return item.name })
-        actionIds = actions.map(function (item) { return item.id })
+        // 候选每次都重取：快捷操作库可能刚改过。
+        libraryActions = ConfigManager.getActions()
+        libraryNames = libraryActions.map(function (item) { return item.name })
+
+        // 老槽位引用的是库里的快捷操作：把内容拷进表单，保存后这格就归自己管。
+        // 引用早就失效时留空表单，由校验拦下来，而不是默默替个别的动作。
+        var preset = slot.action
+        if (!preset && ref.length > 0) {
+            preset = editor.findLibraryAction(ref)
+        }
+        inlineAction.load(preset || {})
 
         var tools = ConfigManager.getToolCatalog()
         toolNames = tools.map(function (item) { return item.title })
         toolKeys = tools.map(function (item) { return item.key })
 
         drives = ConfigManager.getDrives()
+        libraryCombo.currentIndex = 0
         open()
     }
 
+    function findLibraryAction(id) {
+        for (var i = 0; i < libraryActions.length; ++i) {
+            if (libraryActions[i].id === id) {
+                return libraryActions[i]
+            }
+        }
+        return null
+    }
+
+    // 从库里拷一份填进表单；不动已有内容，只补空着的显示名 / 图标。
+    function fillFromLibrary(index) {
+        if (index <= 0) {
+            return
+        }
+        var item = libraryActions[index - 1]
+        if (!item) {
+            return
+        }
+        inlineAction.load(item)
+        if (label.length === 0) {
+            label = item.name || ""
+        }
+        if (iconKey.length === 0) {
+            iconKey = item.icon || ""
+        }
+        libraryCombo.currentIndex = 0
+    }
+
     function commit() {
-        var customAction = kind === "action" && actionSource === "custom"
-        if (customAction) {
+        // 新增面板格子先查一下还剩几格：满了直接拦住，不去惊动后端写盘。
+        if (index < 0 && row === 0) {
+            var usage = ConfigManager.getLauncherPanelUsage()
+            if (usage.used >= usage.capacity) {
+                ConfigManager.notify(qsTr("面板最多 %1 格，先删一格再加。").arg(usage.capacity),
+                                     "warning")
+                return
+            }
+        }
+        if (kind === "action") {
             var invalid = inlineAction.validate()
             if (invalid.length > 0) {
                 ConfigManager.notify(invalid, "warning")
                 return
             }
-        } else if (kind === "action" && ref.length === 0) {
-            ConfigManager.notify(qsTr("请先选一个档案条目"), "warning")
+        } else if (kind === "tool" && toolKey.length === 0) {
+            ConfigManager.notify(qsTr("请先选一个内置功能"), "warning")
             return
         }
         if (kind === "path" && path.trim().length === 0) {
@@ -424,20 +482,21 @@ AppDialog {
             return
         }
 
+        // 动作一律写成内联：ref 传空串，新写入的槽位不再引用快捷操作库。
         var payload = {
             "kind": kind,
             "label": label.trim(),
             "icon": iconKey,
-            "ref": (kind === "action" && !customAction) ? ref : "",
+            "ref": "",
             "key": kind === "tool" ? toolKey : "",
             "path": kind === "path" ? path.trim() : "",
-            "action": customAction ? inlineAction.read() : null
+            "action": kind === "action" ? inlineAction.read() : null
         }
         var ok = index < 0
             ? ConfigManager.addLauncherSlot(row, payload)
             : ConfigManager.updateLauncherSlot(row, index, payload)
         if (!ok) {
-            ConfigManager.notify(qsTr("保存失败，可以看看日志"), "error")
+            ConfigManager.notify(qsTr("保存失败：内容不完整或面板已满，可以看看日志"), "error")
             return
         }
         saved()

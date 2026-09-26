@@ -8,22 +8,25 @@ import "../dialogs"
 
 // 启动台设置。
 //
-// 小窗就是三行槽位，「可自定义程度」对齐档案编辑：每一行都是一个可以增删、前后
-// 移动、逐格编辑的列表 —— 槽位数量不写死，放不下时小窗会横向滚动。
+// 小窗现在只有两块：一块最多 10 格的「双行面板」和一块存储/磁盘区。面板上的
+// 每一格都是独立编辑的（动作自带完整定义），和快捷操作库只靠复制往来。
 Item {
     id: launcherSettings
 
-    readonly property int rowApps: 0
-    readonly property int rowTools: 1
-    readonly property int rowStorage: 2
+    readonly property int rowPanel: 0
+    readonly property int rowStorage: 1
+    // 容量以后端为准，别在两处各写一个 10。
+    readonly property int panelCapacity: ConfigManager
+        ? ConfigManager.getLauncherPanelUsage().capacity : 10
 
-    // 三行的解析结果（含名称/图标/目标），小窗拿的是同一份数据。
+    // 两块的解析结果（含名称/图标/目标），小窗拿的是同一份数据。
     // 界面上显示的是「解析后」的列表（引用失效的槽位被后端跳过了），而编辑 /
     // 删除 / 移动都要用「原始列表」里的下标 —— 结果里的 rowIndex 就是那座桥。
     property var allSlots: []
-    property var appSlots: []
-    property var toolSlots: []
+    property var panelSlots: []
     property var storageSlots: []
+    // 原始面板槽位数：超过 10 格时配置里还在，但小窗只显示前 10 格。
+    property int panelSlotCount: 0
     property string storagePath: ""
     property var storage: ({})
 
@@ -60,7 +63,7 @@ Item {
                 Text {
                     typography: Typography.Caption
                     color: Theme.currentTheme.colors.textSecondaryColor
-                    text: qsTr("桌面右下角那块小窗的三行内容，改完立即生效")
+                    text: qsTr("小窗的面板与存储区，改完立即生效")
                 }
             }
 
@@ -93,72 +96,55 @@ Item {
                 width: scroller.width - 32
                 spacing: 16
 
-                // ── 第一行 ──
+                // ── 面板 ──
                 SettingsGroup {
-                    iconKey: "ic_fluent_apps_20_regular"
-                    title: qsTr("第一行 · 常用应用")
+                    iconKey: "ic_fluent_dock_row_20_regular"
+                    title: qsTr("面板 · 最多 %1 格").arg(launcherSettings.panelCapacity)
 
                     Text {
                         Layout.fillWidth: true
                         typography: Typography.Caption
                         color: Theme.currentTheme.colors.textSecondaryColor
-                        text: qsTr("大格子，适合放常开的程序。候选项来自「档案」页里的条目，"
-                                   + "也可以在槽位里直接指定一个文件夹或磁盘。")
+                        text: qsTr("小窗上那块双行格子板；每格的动作、图标、名称都是独立定义。")
                     }
 
-                    SlotListEditor {
-                        objectName: "appSlotList"
-                        row: launcherSettings.rowApps
-                        slots: launcherSettings.appSlots
-                        emptyHint: qsTr("这一行还是空的，点「添加」放一个应用进来。")
-                        unit: qsTr("个应用")
-                        onAddRequested: slotEditor.openFor(launcherSettings.rowApps, -1, null)
-                        onEditRequested: launcherSettings.editSlot(launcherSettings.rowApps, index)
-                        onRemoveRequested: launcherSettings.removeSlot(launcherSettings.rowApps, index)
-                        onMoveRequested: launcherSettings.moveSlot(
-                                             launcherSettings.rowApps, index, delta)
-                    }
-                }
-
-                // ── 第二行 ──
-                SettingsGroup {
-                    iconKey: "ic_fluent_wrench_20_regular"
-                    title: qsTr("第二行 · 快捷功能")
-
+                    // 配置里手动塞了超过 10 格时说明一声：小窗只会显示前 10 格。
                     Text {
                         Layout.fillWidth: true
+                        visible: launcherSettings.panelSlotCount > launcherSettings.panelCapacity
+                        wrapMode: Text.Wrap
                         typography: Typography.Caption
-                        color: Theme.currentTheme.colors.textSecondaryColor
-                        text: qsTr("小格子，适合放打开设置、重载配置这类动作。"
-                                   + "内置功能之外，也能塞条目或文件夹。")
+                        color: Theme.currentTheme.colors.systemCautionColor
+                        text: qsTr("配置里有 %1 格，小窗只显示前 %2 格。")
+                            .arg(launcherSettings.panelSlotCount)
+                            .arg(launcherSettings.panelCapacity)
                     }
 
                     SlotListEditor {
-                        objectName: "toolSlotList"
-                        row: launcherSettings.rowTools
-                        slots: launcherSettings.toolSlots
-                        emptyHint: qsTr("这一行还是空的，点「添加」放一个功能进来。")
-                        unit: qsTr("个功能")
-                        onAddRequested: slotEditor.openFor(launcherSettings.rowTools, -1, null)
-                        onEditRequested: launcherSettings.editSlot(launcherSettings.rowTools, index)
-                        onRemoveRequested: launcherSettings.removeSlot(launcherSettings.rowTools, index)
+                        objectName: "panelSlotList"
+                        row: launcherSettings.rowPanel
+                        slots: launcherSettings.panelSlots
+                        capacity: launcherSettings.panelCapacity
+                        emptyHint: qsTr("面板还是空的，点「添加」放一格进来。")
+                        unit: qsTr("格")
+                        onAddRequested: slotEditor.openFor(launcherSettings.rowPanel, -1, null)
+                        onEditRequested: launcherSettings.editSlot(launcherSettings.rowPanel, index)
+                        onRemoveRequested: launcherSettings.removeSlot(launcherSettings.rowPanel, index)
                         onMoveRequested: launcherSettings.moveSlot(
-                                             launcherSettings.rowTools, index, delta)
+                                             launcherSettings.rowPanel, index, delta)
                     }
                 }
 
-                // ── 第三行 ──
+                // ── 存储与磁盘 ──
                 SettingsGroup {
                     iconKey: "ic_fluent_hard_drive_20_regular"
-                    title: qsTr("第三行 · 存储与磁盘")
+                    title: qsTr("存储与磁盘")
 
                     Text {
                         Layout.fillWidth: true
                         typography: Typography.Caption
                         color: Theme.currentTheme.colors.textSecondaryColor
-                        text: qsTr("左边固定的那张卡是小窗的存储位置；后面跟着的是磁盘入口 —— "
-                                   + "「可移动磁盘」自动认第一个 U 盘，「文件 / 文件夹 / 磁盘」"
-                                   + "可以钉死某个盘符。两个是各自独立的槽位，随便加减。")
+                        text: qsTr("左边固定的是存储卡片；磁盘入口支持「可移动磁盘」自动检测，或钉死某个盘。")
                     }
 
                     FormRow {
@@ -214,12 +200,21 @@ Item {
         }
     }
 
-    Component.onCompleted: reload()
+    Component.onCompleted: {
+        reload()
+        applyPendingSlotEdit()
+    }
 
     Connections {
         target: ConfigManager
+
         function onLauncherChanged() {
             launcherSettings.reload()
+        }
+
+        // 小窗里右键「编辑这一格…」会直接落到对应的编辑器上。
+        function onSlotEditRequested(row, index) {
+            launcherSettings.openSlotEditor(row, index)
         }
     }
 
@@ -227,12 +222,12 @@ Item {
     // 数据
     // ------------------------------------------------------------------
     function reload() {
-        // 一次取全，再按行分好 —— 比每行各调一次少三倍的解析。
+        // 一次取全，再按块分好 —— 比每块各调一次少几倍的解析。
         var slots = ConfigManager.getLauncherSlots()
         allSlots = slots
-        appSlots = filterRow(slots, rowApps)
-        toolSlots = filterRow(slots, rowTools)
+        panelSlots = filterRow(slots, rowPanel)
         storageSlots = filterRow(slots, rowStorage)
+        panelSlotCount = filterRaw(rowPanel).length
         storagePath = ConfigManager.getLauncherStoragePath()
         storage = ConfigManager.getStorageInfo()
         syncStorageField()
@@ -252,14 +247,31 @@ Item {
     // ------------------------------------------------------------------
     // 交互
     // ------------------------------------------------------------------
+    // 打开某一格的编辑器（index 是界面上解析后的序号）。
     function editSlot(row, index) {
         var shown = shownSlot(row, index)
-        if (!shown) {
+        if (shown) {
+            openSlotEditor(row, shown.rowIndex)
+        }
+    }
+
+    // 按「原始列表」下标打开编辑器；index 为 -1 表示新增。
+    function openSlotEditor(row, index) {
+        if (index < 0) {
+            slotEditor.openFor(row, -1, null)
             return
         }
-        var raw = filterRaw(row)[shown.rowIndex]
+        var raw = filterRaw(row)[index]
         if (raw) {
-            slotEditor.openFor(row, shown.rowIndex, raw)
+            slotEditor.openFor(row, index, raw)
+        }
+    }
+
+    // 小窗右键「编辑这一格 / 再加一格」：页面可能刚切过来，把留下的请求取走。
+    function applyPendingSlotEdit() {
+        var pending = ConfigManager.takePendingSlotEdit()
+        if (pending && pending.row !== undefined) {
+            openSlotEditor(pending.row, pending.index)
         }
     }
 
@@ -289,7 +301,7 @@ Item {
         }
         var name = String(shown.label || shown.name || "")
         confirmRemove.message = name.length > 0
-            ? qsTr("确定要从小窗上移除「%1」这一格吗？只会移除这一格，条目本身还在档案里。").arg(name)
+            ? qsTr("确定要移除「%1」这一格吗？").arg(name)
             : qsTr("确定要移除这一格吗？")
         confirmRemove.callback = function () {
             ConfigManager.deleteLauncherSlot(row, shown.rowIndex)
